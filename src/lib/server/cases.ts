@@ -3,10 +3,49 @@ import { buildWorkCard } from "@/lib/domain/case";
 
 import { query, withTransaction } from "./db";
 
+export type CaseEventSource =
+  | "SYSTEM"
+  | "DMS"
+  | "TECHNICIAN"
+  | "ADVISOR"
+  | "WAREHOUSE"
+  | "CUSTOMER";
+
 export type DmsMappingRow = {
   canonical_operation: string;
   mapping_version: number;
 };
+
+async function recordCaseEvent(client: import("pg").PoolClient, input: {
+  organizationId: string;
+  tireCaseId: string;
+  eventType: string;
+  actorUserId?: string | null;
+  source: CaseEventSource;
+  data?: unknown;
+  previousValue?: unknown;
+  newValue?: unknown;
+  dmsExternalEventId?: string | null;
+}) {
+  await client.query(
+    `insert into tire_case_events (
+       organization_id, tire_case_id, event_type,
+       data, actor_user_id, source, previous_value, new_value, dms_external_event_id
+     )
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      input.organizationId,
+      input.tireCaseId,
+      input.eventType,
+      input.data ? JSON.stringify(input.data) : null,
+      input.actorUserId ?? null,
+      input.source,
+      input.previousValue ? JSON.stringify(input.previousValue) : null,
+      input.newValue ? JSON.stringify(input.newValue) : null,
+      input.dmsExternalEventId ?? null
+    ]
+  );
+}
 
 export async function resolveCanonicalOpsFromDmsCodes(input: {
   organizationId: string;
@@ -106,6 +145,15 @@ export async function ingestDmsEventAndUpsertCase(input: {
     );
     const tireCaseId = caseRes.rows[0]!.id;
 
+    await recordCaseEvent(client, {
+      organizationId: input.organizationId,
+      tireCaseId,
+      eventType: "TIRE_CASE_CREATED",
+      source: "DMS",
+      data: { intent: ops.includes("TIRE_SWAP_FROM_STORAGE") ? "TIRE_SWAP_APPOINTMENT" : "MIXED" },
+      dmsExternalEventId: evRes.rows[0]!.id
+    });
+
     if (input.externalOrderId) {
       await client.query(
         `insert into tire_case_external_links (organization_id, tire_case_id, source_system_key, external_order_id, external_booking_id)
@@ -137,19 +185,20 @@ export async function ingestDmsEventAndUpsertCase(input: {
     }
 
     await client.query(
-      `insert into tire_case_events (organization_id, tire_case_id, event_type, data)
-       values ($1,$2,$3,$4)`,
-      [
-        input.organizationId,
-        tireCaseId,
-        "DMS_ORDER_RECEIVED",
-        JSON.stringify({
-          sourceSystemKey: input.sourceSystemKey,
-          externalEventId: input.externalEventId,
-          dmsCodes: input.dmsCodes
-        })
-      ]
+      `select 1`
     );
+    await recordCaseEvent(client, {
+      organizationId: input.organizationId,
+      tireCaseId,
+      eventType: "DMS_ORDER_RECEIVED",
+      source: "DMS",
+      data: {
+        sourceSystemKey: input.sourceSystemKey,
+        externalEventId: input.externalEventId,
+        dmsCodes: input.dmsCodes
+      },
+      dmsExternalEventId: evRes.rows[0]!.id
+    });
 
     // Generate steps from domain resolver
     const steps = buildWorkCard({
@@ -284,5 +333,156 @@ export async function getCaseWorkCard(input: { organizationId: string; tireCaseI
     nextBestAction: next ? { title: `Nästa: ${next.title}`, stepKind: next.kind } : null,
     steps
   };
+}
+
+export async function listCaseEvents(input: { organizationId: string; tireCaseId: string }) {
+  const res = await query<{
+    id: string;
+    event_type: string;
+    source: string;
+    actor_user_id: string | null;
+    previous_value: any;
+    new_value: any;
+    data: any;
+    created_at: string;
+  }>(
+    `select id, event_type, source, actor_user_id, previous_value, new_value, data, created_at
+     from tire_case_events
+     where organization_id = $1 and tire_case_id = $2
+     order by created_at desc
+     limit 200`,
+    [input.organizationId, input.tireCaseId]
+  );
+  return res.rows;
+}
+
+export async function setStepStatus(input: {
+  organizationId: string;
+  tireCaseId: string;
+  stepKind: string;
+  status: "TODO" | "DOING" | "DONE" | "BLOCKED";
+  actorUserId: string;
+  source?: CaseEventSource;
+}) {
+  return withTransaction(async (client) => {
+    const prevRes = await client.query<{ id: string; status: string }>(
+      `select id, status
+       from tire_case_steps
+       where organization_id = $1 and tire_case_id = $2 and step_kind = $3
+       limit 1`,
+      [input.organizationId, input.tireCaseId, input.stepKind]
+    );
+    const prev = prevRes.rows[0];
+    if (!prev) throw new Error("Steg saknas.");
+
+    await client.query(
+      `update tire_case_steps
+       set status = $1, updated_at = now()
+       where organization_id = $2 and tire_case_id = $3 and step_kind = $4`,
+      [input.status, input.organizationId, input.tireCaseId, input.stepKind]
+    );
+
+    await recordCaseEvent(client, {
+      organizationId: input.organizationId,
+      tireCaseId: input.tireCaseId,
+      eventType: `${input.stepKind}_STATUS_CHANGED`,
+      actorUserId: input.actorUserId,
+      source: input.source ?? "TECHNICIAN",
+      previousValue: { status: prev.status },
+      newValue: { status: input.status }
+    });
+
+    // Auto-complete case when all required steps are DONE
+    const remaining = await client.query<{ c: string }>(
+      `select count(*)::text as c
+       from tire_case_steps
+       where organization_id = $1 and tire_case_id = $2 and required = true and status != 'DONE'`,
+      [input.organizationId, input.tireCaseId]
+    );
+    if (Number(remaining.rows[0]?.c ?? "0") === 0) {
+      const prevCase = await client.query<{ case_status: string }>(
+        `select case_status from tire_cases where organization_id = $1 and id = $2 limit 1`,
+        [input.organizationId, input.tireCaseId]
+      );
+      await client.query(
+        `update tire_cases
+         set case_status = 'DONE', work_status = 'DONE', updated_at = now()
+         where organization_id = $1 and id = $2`,
+        [input.organizationId, input.tireCaseId]
+      );
+      await recordCaseEvent(client, {
+        organizationId: input.organizationId,
+        tireCaseId: input.tireCaseId,
+        eventType: "CASE_COMPLETED",
+        actorUserId: input.actorUserId,
+        source: input.source ?? "TECHNICIAN",
+        previousValue: { case_status: prevCase.rows[0]?.case_status ?? null },
+        newValue: { case_status: "DONE" }
+      });
+    }
+  });
+}
+
+export async function blockCase(input: {
+  organizationId: string;
+  tireCaseId: string;
+  actorUserId: string;
+  reason: string; // e.g. WHEEL_SET_NOT_FOUND
+  details: unknown;
+  source?: CaseEventSource;
+}) {
+  return withTransaction(async (client) => {
+    const prev = await client.query<{ case_status: string; blocked_reason: string | null }>(
+      `select case_status, blocked_reason
+       from tire_cases
+       where organization_id = $1 and id = $2
+       limit 1`,
+      [input.organizationId, input.tireCaseId]
+    );
+    if (!prev.rows[0]) throw new Error("Ärende saknas.");
+
+    await client.query(
+      `update tire_cases
+       set case_status = 'BLOCKED',
+           blocked_reason = $1,
+           blocked_details = $2,
+           blocked_at = now(),
+           blocked_by_user_id = $3,
+           updated_at = now()
+       where organization_id = $4 and id = $5`,
+      [
+        input.reason,
+        JSON.stringify(input.details ?? {}),
+        input.actorUserId,
+        input.organizationId,
+        input.tireCaseId
+      ]
+    );
+
+    await client.query(
+      `insert into tire_case_exceptions (
+         organization_id, tire_case_id, exception_type, details, status, opened_by_user_id
+       )
+       values ($1,$2,$3,$4,'OPEN',$5)`,
+      [
+        input.organizationId,
+        input.tireCaseId,
+        input.reason,
+        JSON.stringify(input.details ?? {}),
+        input.actorUserId
+      ]
+    );
+
+    await recordCaseEvent(client, {
+      organizationId: input.organizationId,
+      tireCaseId: input.tireCaseId,
+      eventType: "CASE_BLOCKED",
+      actorUserId: input.actorUserId,
+      source: input.source ?? "TECHNICIAN",
+      previousValue: { case_status: prev.rows[0].case_status, blocked_reason: prev.rows[0].blocked_reason },
+      newValue: { case_status: "BLOCKED", blocked_reason: input.reason },
+      data: { details: input.details ?? {} }
+    });
+  });
 }
 
