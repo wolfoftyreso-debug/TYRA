@@ -1,0 +1,55 @@
+{
+  "name": "tyra-dackhotell",
+  "version": "1.0.0",
+  "description": "Däckhotell och offertmotor för Pixdrift",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "node scripts/migrate.mjs",
+    "db:seed": "node scripts/seed.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wolfoftyreso-debug/TYRA.git"
+  },
+  "keywords": [
+    "däckhotell",
+    "nextjs",
+    "vercel"
+  ],
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/wolfoftyreso-debug/TYRA/issues"
+  },
+  "homepage": "https://github.com/wolfoftyreso-debug/TYRA#readme",
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "better-auth": "^1.7.1",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.2",
+    "lucide-react": "^1.33.0",
+    "next": "^16.3.2",
+    "pg": "^8.23.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^26.2.0",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "eslint": "^10.9.0",
+    "eslint-config-next": "^16.3.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.11"
+  }
+}
