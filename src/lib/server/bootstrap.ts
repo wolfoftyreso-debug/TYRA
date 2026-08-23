@@ -218,6 +218,45 @@ export async function ensureBootstrap(input: { userId: string }) {
         nowIso()
       ]
     );
+
+    // Seed canonical DMS mapping (demo)
+    await client.query(
+      `insert into dms_systems (organization_id, key, name, capabilities)
+       values ($1, $2, $3, $4)
+       on conflict (organization_id, key) do nothing`,
+      [
+        organizationId,
+        "DEMO_DMS",
+        "Demo DMS",
+        JSON.stringify({
+          supportsReadOrders: true,
+          supportsWriteOrders: false,
+          supportsAddOrderLine: false,
+          supportsUpdateBooking: false,
+          supportsCustomerLookup: true,
+          supportsVehicleLookup: true,
+          supportsPricing: false,
+          supportsInvoiceStatus: false
+        })
+      ]
+    );
+
+    const demoMappings: Array<[string, string, string]> = [
+      ["DH01", "Hjulskifte hotellkund", "TIRE_SWAP_FROM_STORAGE"],
+      ["DH03", "Utlämning hjul", "STORAGE_OUT"],
+      ["DH04", "Inlämning hjul", "STORAGE_IN"],
+      ["DH06", "Hjultvätt", "WHEEL_WASH"],
+      ["DH05", "Hjulbalansering", "WHEEL_BALANCE"]
+    ];
+
+    for (const [code, desc, op] of demoMappings) {
+      await client.query(
+        `insert into dms_code_mappings (organization_id, dms_system_key, dms_code, description, canonical_operation, mapping_version, active)
+         values ($1, $2, $3, $4, $5, 1, true)
+         on conflict (organization_id, dms_system_key, dms_code, mapping_version) do nothing`,
+        [organizationId, "DEMO_DMS", code, desc, op]
+      );
+    }
   });
 }
 

@@ -1,5 +1,6 @@
 export type Command =
   | { kind: "navigate"; to: "pick_queue" | "quotes_queue" }
+  | { kind: "navigate"; to: "cases" }
   | { kind: "lookup_registration"; registrationNumber: string }
   | { kind: "lookup_storage_position"; code: string }
   | { kind: "lookup_wheel_set_code"; code: string }
@@ -34,6 +35,9 @@ export function parseCommand(rawInput: string): Command {
   const upper = normalizeUpper(raw);
   const lower = raw.toLowerCase();
 
+  if (lower === "ärenden" || lower === "arenden" || lower === "cases" || lower === "case") {
+    return { kind: "navigate", to: "cases" };
+  }
   if (lower === "plockkö" || lower === "plock" || lower === "pick") {
     return { kind: "navigate", to: "pick_queue" };
   }

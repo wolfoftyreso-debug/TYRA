@@ -18,6 +18,7 @@ function EmptyHint() {
   return (
     <div className="mt-3 text-sm text-white/60">
       <div className="flex flex-wrap gap-2">
+        {pill("ärenden")}
         {pill("ABC123")}
         {pill("A-04-B-12")}
         {pill("WS-7K2F")}
@@ -65,7 +66,13 @@ export function CommandBar() {
           startTransition(async () => {
             const res = await runCommandAction({ text: q });
             if (res.kind === "navigate") {
-              router.push(res.to === "pick_queue" ? "/ops/pick" : "/ops/quotes");
+              router.push(
+                res.to === "pick_queue"
+                  ? "/ops/pick"
+                  : res.to === "quotes_queue"
+                    ? "/ops/quotes"
+                    : "/ops/cases"
+              );
               return;
             }
             setLast(res);
