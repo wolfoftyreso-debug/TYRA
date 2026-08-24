@@ -1,6 +1,7 @@
 export type Command =
   | { kind: "navigate"; to: "pick_queue" | "quotes_queue" }
   | { kind: "navigate"; to: "cases" }
+  | { kind: "navigate"; to: "integrations" }
   | { kind: "lookup_registration"; registrationNumber: string }
   | { kind: "lookup_storage_position"; code: string }
   | { kind: "lookup_wheel_set_code"; code: string }
@@ -43,6 +44,15 @@ export function parseCommand(rawInput: string): Command {
   }
   if (lower === "offerter" || lower === "offert" || lower === "quotes") {
     return { kind: "navigate", to: "quotes_queue" };
+  }
+  if (
+    lower === "leverantörer" ||
+    lower === "leverantorer" ||
+    lower === "integrationer" ||
+    lower === "integrations" ||
+    lower === "suppliers"
+  ) {
+    return { kind: "navigate", to: "integrations" };
   }
 
   if (isRegNo(upper)) return { kind: "lookup_registration", registrationNumber: upper };

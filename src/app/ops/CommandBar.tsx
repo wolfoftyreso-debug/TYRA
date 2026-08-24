@@ -60,6 +60,8 @@ export function CommandBar() {
                     ? "/ops/pick"
                     : res.to === "quotes_queue"
                       ? "/ops/quotes"
+                    : res.to === "integrations"
+                      ? "/ops/integrations"
                       : "/ops/cases"
                 );
                 return;

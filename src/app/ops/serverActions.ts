@@ -11,6 +11,7 @@ import {
 export type CommandResponse =
   | { kind: "navigate"; to: "pick_queue" | "quotes_queue" }
   | { kind: "navigate"; to: "cases" }
+  | { kind: "navigate"; to: "integrations" }
   | { kind: "vehicle"; data: Awaited<ReturnType<typeof lookupByRegistration>> }
   | {
       kind: "position";
@@ -28,7 +29,7 @@ export async function runCommandAction(input: { text: string }): Promise<Command
     return {
       kind: "unknown",
       message:
-        "Jag förstod inte. Prova regnr (ABC123), hyllkod (A-04-B-12), WS-kod (WS-XXXX), 'ärenden', 'plockkö' eller 'offerter'."
+        "Jag förstod inte. Prova regnr (ABC123), hyllkod (A-04-B-12), WS-kod (WS-XXXX), 'ärenden', 'plockkö', 'offerter' eller 'leverantörer'."
     };
   }
 

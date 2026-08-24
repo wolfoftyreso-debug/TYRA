@@ -17,6 +17,9 @@ export type SupplierAccount = {
   priority: number;
   pricingEnabled: boolean;
   orderingEnabled: boolean;
+  lastOkAt: string | null;
+  lastErrorAt: string | null;
+  lastErrorMessage: string | null;
 };
 
 export type SearchProductsInput = {

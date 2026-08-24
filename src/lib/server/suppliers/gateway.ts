@@ -3,6 +3,7 @@ import type { SupplierAccount, TyreSupplierAdapter } from "@/lib/suppliers/inter
 
 import { query } from "@/lib/server/db";
 import { dbSupplierAdapter } from "./adapters/dbSupplierAdapter";
+import { markSupplierError, markSupplierOk, recordSupplierEvent } from "./health";
 
 const adapters: Record<SupplierId, TyreSupplierAdapter> = {
   ntg: { ...dbSupplierAdapter, supplierId: "ntg", name: "Nordic Tyre Group / Gummigrossen (stub)" },
@@ -27,9 +28,13 @@ export async function listTenantSupplierAccounts(input: { organizationId: string
     priority: number;
     pricing_enabled: boolean;
     ordering_enabled: boolean;
+    last_ok_at: string | null;
+    last_error_at: string | null;
+    last_error_message: string | null;
   }>(
     `select id, supplier_id, external_customer_id, credentials_reference,
-            currency, enabled, priority, pricing_enabled, ordering_enabled
+            currency, enabled, priority, pricing_enabled, ordering_enabled,
+            last_ok_at, last_error_at, last_error_message
      from tenant_supplier_accounts
      where organization_id = $1
      order by enabled desc, priority asc`,
@@ -50,7 +55,10 @@ export async function listTenantSupplierAccounts(input: { organizationId: string
       enabled: r.enabled,
       priority: r.priority,
       pricingEnabled: r.pricing_enabled,
-      orderingEnabled: r.ordering_enabled
+      orderingEnabled: r.ordering_enabled,
+      lastOkAt: r.last_ok_at,
+      lastErrorAt: r.last_error_at,
+      lastErrorMessage: r.last_error_message
     });
   }
   return accounts;
@@ -76,7 +84,35 @@ export async function searchSupplierProducts(input: {
       identity: input.identity,
       limit: input.limitPerSupplier ?? 10
     });
-    if (res.ok) out.push(...res.value);
+    if (res.ok) {
+      await markSupplierOk({ organizationId: input.organizationId, supplierId: acc.supplierId, supplierAccountId: acc.id });
+      await recordSupplierEvent({
+        organizationId: input.organizationId,
+        supplierId: acc.supplierId,
+        supplierAccountId: acc.id,
+        level: "ok",
+        eventType: "SEARCH",
+        message: `Sökning OK (${res.value.length} produkter).`,
+        data: { identity: input.identity }
+      });
+      out.push(...res.value);
+    } else {
+      await markSupplierError({
+        organizationId: input.organizationId,
+        supplierId: acc.supplierId,
+        supplierAccountId: acc.id,
+        message: res.error.message
+      });
+      await recordSupplierEvent({
+        organizationId: input.organizationId,
+        supplierId: acc.supplierId,
+        supplierAccountId: acc.id,
+        level: "error",
+        eventType: "SEARCH",
+        message: res.error.message,
+        data: { kind: res.error.kind, identity: input.identity }
+      });
+    }
   }
 
   return { ok: true, value: out };
@@ -96,6 +132,35 @@ export async function getCachedOfferForProduct(input: {
     };
   }
   const adapter = adapters[input.supplierId];
-  return adapter.getOffer({ organizationId: input.organizationId, account, tireProductId: input.tireProductId });
+  const res = await adapter.getOffer({ organizationId: input.organizationId, account, tireProductId: input.tireProductId });
+  if (res.ok) {
+    await markSupplierOk({ organizationId: input.organizationId, supplierId: account.supplierId, supplierAccountId: account.id });
+    await recordSupplierEvent({
+      organizationId: input.organizationId,
+      supplierId: account.supplierId,
+      supplierAccountId: account.id,
+      level: "ok",
+      eventType: "PRICE",
+      message: res.value ? "Pris hämtat (cache)." : "Inget pris i cache.",
+      data: { tireProductId: input.tireProductId }
+    });
+  } else {
+    await markSupplierError({
+      organizationId: input.organizationId,
+      supplierId: account.supplierId,
+      supplierAccountId: account.id,
+      message: res.error.message
+    });
+    await recordSupplierEvent({
+      organizationId: input.organizationId,
+      supplierId: account.supplierId,
+      supplierAccountId: account.id,
+      level: "error",
+      eventType: "PRICE",
+      message: res.error.message,
+      data: { kind: res.error.kind, tireProductId: input.tireProductId }
+    });
+  }
+  return res;
 }
 
