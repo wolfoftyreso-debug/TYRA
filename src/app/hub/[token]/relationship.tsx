@@ -89,7 +89,7 @@ export function RelationshipClient(props: {
             <div className="text-xs font-medium text-[var(--tyra-muted)]">Önskat lufttryck</div>
             <select
               value={pressureProfile}
-              onChange={(e) => setPressureProfile(e.target.value)}
+              onChange={(e) => setPressureProfile(e.target.value as "light" | "normal" | "full")}
               className="mt-2 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-sm outline-none"
             >
               <option value="light">Ingen last</option>
