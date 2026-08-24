@@ -1,12 +1,13 @@
 "use server";
 
-import { acceptOfferOptionFromHub } from "@/lib/server/hub";
+import { placeTireOrderFromHub } from "@/lib/server/hub";
 
-export async function acceptOfferOptionAction(input: {
+export async function placeOrderAction(input: {
   token: string;
-  offerId: string;
-  optionId: string;
+  tireProductId: string;
+  quantity: number;
+  enteredRegistrationNumber: string;
 }) {
-  return acceptOfferOptionFromHub(input);
+  return placeTireOrderFromHub(input);
 }
 

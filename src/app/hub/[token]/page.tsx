@@ -41,11 +41,38 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
           {view.vehicle?.make ? `${view.vehicle.make} ` : ""}
           {view.vehicle?.model ?? ""}
-          {view.vehicle?.registrationNumber ? (
-            <span className="text-black/50"> — {view.vehicle.registrationNumber}</span>
-          ) : null}
         </h1>
         <div className="mt-2 text-sm text-black/60">{view.customerName}</div>
+
+        {view.lastOrder ? (
+          <div className="mt-8 rounded-3xl border border-black/10 bg-white p-6">
+            <div className="text-xs font-medium text-black/60">Beställning</div>
+            <div className="mt-2 text-sm text-black/80">
+              Vi har tagit emot din beställning. Betalning sker hos verkstaden.
+            </div>
+            <div className="mt-3 rounded-2xl border border-black/10 bg-white p-4 text-sm">
+              <div className="font-medium">
+                {view.lastOrder.order_snapshot?.product?.brand ?? ""}{" "}
+                {view.lastOrder.order_snapshot?.product?.model ?? ""}
+              </div>
+              <div className="mt-1 text-black/60">
+                {view.lastOrder.order_snapshot?.product?.dimension ?? ""} •{" "}
+                {view.lastOrder.order_snapshot?.quantity ?? ""} st
+              </div>
+              <div className="mt-2">
+                Totalt:{" "}
+                <span className="font-medium">
+                  {view.lastOrder.order_snapshot?.livePriceSnapshot?.totalCustomerPriceOre
+                    ? formatSekFromOre(view.lastOrder.order_snapshot.livePriceSnapshot.totalCustomerPriceOre)
+                    : "—"}
+                </span>
+              </div>
+              <div className="mt-1 text-xs text-black/50">
+                Mottagen {new Date(view.lastOrder.ordered_at).toLocaleString("sv-SE")}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-10 rounded-3xl border border-black/10 bg-white p-6">
           <div className="text-xs font-medium text-black/60">Dina däck</div>
@@ -88,17 +115,17 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
         <div className="mt-10 rounded-3xl border border-black/10 bg-white p-6">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs font-medium text-black/60">Rekommenderade däck</div>
+              <div className="text-xs font-medium text-black/60">Dagens alternativ</div>
               <div className="mt-2 text-sm text-black/70">
-                Monterat och klart (4 däck + montering + miljöavgift).
+                Livepris monterat och klart (inkl. montering + miljöavgift).
               </div>
             </div>
           </div>
 
-          {view.offer?.options?.length ? (
+          {view.liveOptions?.options?.length ? (
             <div className="mt-6 space-y-3">
-              {view.offer.options.map((o: any) => (
-                <div key={o.optionId} className="rounded-2xl border border-black/10 bg-white p-4">
+              {view.liveOptions.options.map((o: any) => (
+                <div key={o.liveOptionId} className="rounded-2xl border border-black/10 bg-white p-4">
                   <div className="flex items-start justify-between gap-6">
                     <div>
                       <div className="text-sm font-semibold tracking-tight">
@@ -107,25 +134,30 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
                       <div className="mt-1 text-xs text-black/60">{o.dimension}</div>
                       <div className="mt-2 text-sm">
                         <span className="font-medium">
-                          {formatSekFromOre(o.pricing.totalCustomerPriceOre)}
+                          {formatSekFromOre(o.livePrice.totalCustomerPriceOre)}
                         </span>{" "}
-                        <span className="text-black/60">komplett</span>
+                        <span className="text-black/60">komplett</span>{" "}
+                        <span className="text-black/50">
+                          för {o.livePrice.quantity}
+                        </span>
                       </div>
                       <div className="mt-1 text-xs text-black/50">
                         Pris uppdaterat{" "}
-                        {new Date(o.pricing.supplierPriceTimestamp).toLocaleString("sv-SE")}
+                        {new Date(o.livePrice.supplierPriceTimestamp).toLocaleString("sv-SE")}
                       </div>
                     </div>
-                    {view.offer ? (
-                      <HubClient token={token} offerId={view.offer.offerId} optionId={o.optionId} />
-                    ) : null}
+                    <HubClient
+                      token={token}
+                      tireProductId={o.tireProductId}
+                      quantity={o.livePrice.quantity}
+                    />
                   </div>
                 </div>
               ))}
             </div>
           ) : (
             <div className="mt-6 rounded-2xl border border-black/10 bg-white p-4 text-sm text-black/70">
-              Inga alternativ tillgängliga just nu.
+              Inga alternativ tillgängliga just nu (eller kontroll pågår).
             </div>
           )}
         </div>
