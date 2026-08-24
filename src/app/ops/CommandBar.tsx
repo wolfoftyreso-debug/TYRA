@@ -83,7 +83,13 @@ export function CommandBar() {
 
           <div className="mt-4 flex items-center justify-between gap-4">
             <div className="text-sm text-[var(--tyra-muted)]">
-              {isPending ? "Söker…" : last?.kind === "unknown" ? last.message : " "}
+              {isPending
+                ? "Söker…"
+                : last?.kind === "unknown"
+                  ? last.message
+                  : last?.kind === "ok"
+                    ? last.message
+                    : " "}
             </div>
             <Button type="submit" tone="primary" size="lg" disabled={!canSubmit}>
               Kör

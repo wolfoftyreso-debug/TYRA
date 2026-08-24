@@ -1,6 +1,6 @@
 import { query, withTransaction } from "@/lib/server/db";
 
-type Channel = "sms" | "email";
+type Channel = "sms" | "email" | "letter";
 
 type ReminderTarget = {
   organizationId: string;
@@ -8,11 +8,16 @@ type ReminderTarget = {
   customerName: string | null;
   customerPhone: string | null;
   customerEmail: string | null;
+  customerAddressLine1: string | null;
+  customerPostalCode: string | null;
+  customerCity: string | null;
+  customerCountry: string | null;
   vehicleId: string;
   registrationNumber: string;
   make: string | null;
   model: string | null;
   mountedSeason: string | null;
+  vehicleLifecycleStatus: string;
   remindSeason: boolean;
 };
 
@@ -39,13 +44,22 @@ function vehicleLabel(t: ReminderTarget) {
 }
 
 function buildMessage(input: {
-  kind: "season" | "law";
+  kind: "season" | "law" | "pickup";
   targetSeason: "winter" | "summer";
   target: ReminderTarget;
   daysLeft?: number;
+  attempt?: number;
+  delivery?: "sms" | "email" | "letter";
 }): { subject: string; body: string } {
   const name = input.target.customerName ?? "Hej";
   const v = vehicleLabel(input.target);
+
+  if (input.kind === "pickup") {
+    return {
+      subject: `Påminnelse: hjul kvar hos verkstaden (${input.target.registrationNumber})`,
+      body: `${name}!\n\nVi har ett hjulset kvar hos oss för ${v}.\nHör av dig så löser vi utlämning eller hur du vill göra.\n\n/ TYRA`
+    };
+  }
 
   if (input.kind === "season" && input.targetSeason === "winter") {
     return {
@@ -79,11 +93,16 @@ async function listTargets(input: { organizationId: string }): Promise<ReminderT
     customer_name: string | null;
     customer_phone: string | null;
     customer_email: string | null;
+    address_line1: string | null;
+    postal_code: string | null;
+    city: string | null;
+    country: string | null;
     vehicle_id: string;
     registration_number: string;
     make: string | null;
     model: string | null;
     mounted_season: string | null;
+    lifecycle_status: string;
     remind_season: boolean | null;
   }>(
     `select
@@ -92,10 +111,15 @@ async function listTargets(input: { organizationId: string }): Promise<ReminderT
        c.name as customer_name,
        c.phone as customer_phone,
        c.email as customer_email,
+       c.address_line1 as address_line1,
+       c.postal_code as postal_code,
+       c.city as city,
+       c.country as country,
        v.id as vehicle_id,
        v.registration_number as registration_number,
        v.make as make,
        v.model as model,
+       v.lifecycle_status as lifecycle_status,
        (
          select ws.season
          from wheel_sets ws
@@ -120,13 +144,62 @@ async function listTargets(input: { organizationId: string }): Promise<ReminderT
     customerName: r.customer_name,
     customerPhone: r.customer_phone,
     customerEmail: r.customer_email,
+    customerAddressLine1: r.address_line1,
+    customerPostalCode: r.postal_code,
+    customerCity: r.city,
+    customerCountry: r.country,
     vehicleId: r.vehicle_id,
     registrationNumber: r.registration_number,
     make: r.make,
     model: r.model,
     mountedSeason: r.mounted_season,
+    vehicleLifecycleStatus: r.lifecycle_status,
     remindSeason: r.remind_season !== false
   }));
+}
+
+async function getOrCreateThread(input: {
+  organizationId: string;
+  vehicleId?: string | null;
+  wheelSetId?: string | null;
+  threadKey: string;
+}) {
+  const res = await query<{
+    id: string;
+    status: string;
+    attempt_count: number;
+    escalated_at: string | null;
+    stopped_reason: string | null;
+  }>(
+    `insert into reminder_threads (organization_id, vehicle_id, wheel_set_id, thread_key)
+     values ($1,$2,$3,$4)
+     on conflict (organization_id, thread_key) do update set updated_at = now()
+     returning id, status, attempt_count, escalated_at, stopped_reason`,
+    [input.organizationId, input.vehicleId ?? null, input.wheelSetId ?? null, input.threadKey]
+  );
+  return res.rows[0]!;
+}
+
+async function incrementAttempt(input: { threadId: string }) {
+  const res = await query<{ attempt_count: number }>(
+    `update reminder_threads
+     set attempt_count = attempt_count + 1,
+         last_attempt_at = now(),
+         updated_at = now()
+     where id = $1
+     returning attempt_count`,
+    [input.threadId]
+  );
+  return res.rows[0]!.attempt_count;
+}
+
+async function markEscalated(input: { threadId: string }) {
+  await query(
+    `update reminder_threads
+     set escalated_at = now(), updated_at = now()
+     where id = $1 and escalated_at is null`,
+    [input.threadId]
+  );
 }
 
 async function tryCreateDelivery(input: {
@@ -197,67 +270,147 @@ export async function runSeasonAndLawReminders(input: {
   let skippedPrefsOff = 0;
 
   for (const t of targets) {
+    if ((t.vehicleLifecycleStatus ?? "ACTIVE") === "SOLD") {
+      continue;
+    }
     if (!t.remindSeason) {
       skippedPrefsOff++;
       continue;
     }
 
     const channel = chooseChannel(t);
-    if (!channel) {
-      skippedNoContact++;
-      continue;
-    }
+    // For letter escalation we can proceed even without phone/email, but we do prefer a direct channel for first attempts.
 
     const mounted = (t.mountedSeason ?? "").toLowerCase();
 
     // Season reminders
     if (now >= winterSeasonWindowStart && now <= winterSeasonWindowEnd && mounted && mounted !== "winter") {
-      const reminderKey = `season:winter:${year}:${t.vehicleId}`;
       await withTransaction(async () => {
-        const deliveryId = await tryCreateDelivery({
+        const thread = await getOrCreateThread({
           organizationId: t.organizationId,
-          customerId: t.customerId,
           vehicleId: t.vehicleId,
-          reminderKey
+          threadKey: `season:winter:${year}:${t.vehicleId}`
         });
-        if (!deliveryId) return;
-        const msg = buildMessage({ kind: "season", targetSeason: "winter", target: t });
-        const outboxId = await createOutbox({
-          organizationId: t.organizationId,
-          customerId: t.customerId,
-          vehicleId: t.vehicleId,
-          channel: channel.channel,
-          recipient: channel.recipient,
-          subject: msg.subject,
-          body: msg.body
-        });
-        await attachOutboxToDelivery({ deliveryId, outboxId });
-        enqueued++;
+        if (thread.status !== "OPEN") return;
+        if (thread.attempt_count < 3) {
+          if (!channel) {
+            skippedNoContact++;
+            return;
+          }
+          const attempt = await incrementAttempt({ threadId: thread.id });
+          const reminderKey = `season:winter:${year}:${t.vehicleId}:attempt:${attempt}`;
+          const deliveryId = await tryCreateDelivery({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            reminderKey
+          });
+          if (!deliveryId) return;
+          const msg = buildMessage({ kind: "season", targetSeason: "winter", target: t, attempt, delivery: channel.channel });
+          const outboxId = await createOutbox({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            channel: channel.channel,
+            recipient: channel.recipient,
+            subject: msg.subject,
+            body: msg.body
+          });
+          await attachOutboxToDelivery({ deliveryId, outboxId });
+          enqueued++;
+          return;
+        }
+        if (!thread.escalated_at) {
+          const reminderKey = `season:winter:${year}:${t.vehicleId}:letter`;
+          const deliveryId = await tryCreateDelivery({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            reminderKey
+          });
+          if (!deliveryId) return;
+          const letterRecipient = t.customerAddressLine1
+            ? `${t.customerName ?? "Kund"}\n${t.customerAddressLine1}\n${t.customerPostalCode ?? ""} ${t.customerCity ?? ""}\n${t.customerCountry ?? "SE"}`
+            : `${t.customerName ?? "Kund"} (saknar adress)`;
+          const msg = buildMessage({ kind: "season", targetSeason: "winter", target: t, delivery: "letter" });
+          const outboxId = await createOutbox({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            channel: "letter",
+            recipient: letterRecipient,
+            subject: `REKOMMENDERAT BREV: ${msg.subject}`,
+            body: `${msg.body}\n\n---\nÅtgärd: Skicka rekommenderat brev (manuellt).`
+          });
+          await attachOutboxToDelivery({ deliveryId, outboxId });
+          await markEscalated({ threadId: thread.id });
+          enqueued++;
+        }
       });
     }
 
     if (now >= summerSeasonWindowStart && now <= summerSeasonWindowEnd && mounted && mounted !== "summer") {
-      const reminderKey = `season:summer:${year}:${t.vehicleId}`;
       await withTransaction(async () => {
-        const deliveryId = await tryCreateDelivery({
+        const thread = await getOrCreateThread({
           organizationId: t.organizationId,
-          customerId: t.customerId,
           vehicleId: t.vehicleId,
-          reminderKey
+          threadKey: `season:summer:${year}:${t.vehicleId}`
         });
-        if (!deliveryId) return;
-        const msg = buildMessage({ kind: "season", targetSeason: "summer", target: t });
-        const outboxId = await createOutbox({
-          organizationId: t.organizationId,
-          customerId: t.customerId,
-          vehicleId: t.vehicleId,
-          channel: channel.channel,
-          recipient: channel.recipient,
-          subject: msg.subject,
-          body: msg.body
-        });
-        await attachOutboxToDelivery({ deliveryId, outboxId });
-        enqueued++;
+        if (thread.status !== "OPEN") return;
+        if (thread.attempt_count < 3) {
+          if (!channel) {
+            skippedNoContact++;
+            return;
+          }
+          const attempt = await incrementAttempt({ threadId: thread.id });
+          const reminderKey = `season:summer:${year}:${t.vehicleId}:attempt:${attempt}`;
+          const deliveryId = await tryCreateDelivery({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            reminderKey
+          });
+          if (!deliveryId) return;
+          const msg = buildMessage({ kind: "season", targetSeason: "summer", target: t, attempt, delivery: channel.channel });
+          const outboxId = await createOutbox({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            channel: channel.channel,
+            recipient: channel.recipient,
+            subject: msg.subject,
+            body: msg.body
+          });
+          await attachOutboxToDelivery({ deliveryId, outboxId });
+          enqueued++;
+          return;
+        }
+        if (!thread.escalated_at) {
+          const reminderKey = `season:summer:${year}:${t.vehicleId}:letter`;
+          const deliveryId = await tryCreateDelivery({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            reminderKey
+          });
+          if (!deliveryId) return;
+          const letterRecipient = t.customerAddressLine1
+            ? `${t.customerName ?? "Kund"}\n${t.customerAddressLine1}\n${t.customerPostalCode ?? ""} ${t.customerCity ?? ""}\n${t.customerCountry ?? "SE"}`
+            : `${t.customerName ?? "Kund"} (saknar adress)`;
+          const msg = buildMessage({ kind: "season", targetSeason: "summer", target: t, delivery: "letter" });
+          const outboxId = await createOutbox({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            channel: "letter",
+            recipient: letterRecipient,
+            subject: `REKOMMENDERAT BREV: ${msg.subject}`,
+            body: `${msg.body}\n\n---\nÅtgärd: Skicka rekommenderat brev (manuellt).`
+          });
+          await attachOutboxToDelivery({ deliveryId, outboxId });
+          await markEscalated({ threadId: thread.id });
+          enqueued++;
+        }
       });
     }
 
@@ -265,20 +418,164 @@ export async function runSeasonAndLawReminders(input: {
     const withinLawWindow = now < winterLawDeadline && daysUntil(now, winterLawDeadline) <= 14;
     if (withinLawWindow && mounted && mounted !== "winter") {
       const daysLeft = Math.max(0, daysUntil(now, winterLawDeadline));
-      const reminderKey = `law:winter:${year}:${t.vehicleId}`;
       await withTransaction(async () => {
+        const thread = await getOrCreateThread({
+          organizationId: t.organizationId,
+          vehicleId: t.vehicleId,
+          threadKey: `law:winter:${year}:${t.vehicleId}`
+        });
+        if (thread.status !== "OPEN") return;
+        if (thread.attempt_count < 3) {
+          if (!channel) {
+            skippedNoContact++;
+            return;
+          }
+          const attempt = await incrementAttempt({ threadId: thread.id });
+          const reminderKey = `law:winter:${year}:${t.vehicleId}:attempt:${attempt}`;
+          const deliveryId = await tryCreateDelivery({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            reminderKey
+          });
+          if (!deliveryId) return;
+          const msg = buildMessage({ kind: "law", targetSeason: "winter", target: t, daysLeft, attempt, delivery: channel.channel });
+          const outboxId = await createOutbox({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            channel: channel.channel,
+            recipient: channel.recipient,
+            subject: msg.subject,
+            body: msg.body
+          });
+          await attachOutboxToDelivery({ deliveryId, outboxId });
+          enqueued++;
+          return;
+        }
+        if (!thread.escalated_at) {
+          const reminderKey = `law:winter:${year}:${t.vehicleId}:letter`;
+          const deliveryId = await tryCreateDelivery({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            reminderKey
+          });
+          if (!deliveryId) return;
+          const letterRecipient = t.customerAddressLine1
+            ? `${t.customerName ?? "Kund"}\n${t.customerAddressLine1}\n${t.customerPostalCode ?? ""} ${t.customerCity ?? ""}\n${t.customerCountry ?? "SE"}`
+            : `${t.customerName ?? "Kund"} (saknar adress)`;
+          const msg = buildMessage({ kind: "law", targetSeason: "winter", target: t, daysLeft, delivery: "letter" });
+          const outboxId = await createOutbox({
+            organizationId: t.organizationId,
+            customerId: t.customerId,
+            vehicleId: t.vehicleId,
+            channel: "letter",
+            recipient: letterRecipient,
+            subject: `REKOMMENDERAT BREV: ${msg.subject}`,
+            body: `${msg.body}\n\n---\nÅtgärd: Skicka rekommenderat brev (manuellt).`
+          });
+          await attachOutboxToDelivery({ deliveryId, outboxId });
+          await markEscalated({ threadId: thread.id });
+          enqueued++;
+        }
+      });
+    }
+  }
+
+  // Forgotten wheels: wheel_sets marked as FORGOTTEN_LEFT_BEHIND and still stored
+  const forgotten = await query<{
+    wheel_set_id: string;
+    vehicle_id: string | null;
+    customer_id: string | null;
+    customer_name: string | null;
+    customer_phone: string | null;
+    customer_email: string | null;
+    address_line1: string | null;
+    postal_code: string | null;
+    city: string | null;
+    country: string | null;
+    registration_number: string | null;
+    make: string | null;
+    model: string | null;
+    lifecycle_status: string | null;
+    remind_season: boolean | null;
+  }>(
+    `select
+       ws.id as wheel_set_id,
+       ws.vehicle_id as vehicle_id,
+       ws.customer_id as customer_id,
+       c.name as customer_name,
+       c.phone as customer_phone,
+       c.email as customer_email,
+       c.address_line1 as address_line1,
+       c.postal_code as postal_code,
+       c.city as city,
+       c.country as country,
+       v.registration_number as registration_number,
+       v.make as make,
+       v.model as model,
+       v.lifecycle_status as lifecycle_status,
+       coalesce(p.remind_season, true) as remind_season
+     from wheel_sets ws
+     left join customers c on c.organization_id = ws.organization_id and c.id = ws.customer_id
+     left join vehicles v on v.organization_id = ws.organization_id and v.id = ws.vehicle_id
+     left join customer_communication_preferences p on p.organization_id = ws.organization_id and p.customer_id = ws.customer_id
+     where ws.organization_id = $1
+       and ws.disposition_status = 'FORGOTTEN_LEFT_BEHIND'
+       and ws.storage_status = 'STORED'`,
+    [input.organizationId]
+  );
+
+  for (const r of forgotten.rows) {
+    const t: ReminderTarget = {
+      organizationId: input.organizationId,
+      customerId: r.customer_id,
+      customerName: r.customer_name,
+      customerPhone: r.customer_phone,
+      customerEmail: r.customer_email,
+      customerAddressLine1: r.address_line1,
+      customerPostalCode: r.postal_code,
+      customerCity: r.city,
+      customerCountry: r.country,
+      vehicleId: r.vehicle_id ?? "",
+      registrationNumber: r.registration_number ?? "—",
+      make: r.make,
+      model: r.model,
+      mountedSeason: null,
+      vehicleLifecycleStatus: r.lifecycle_status ?? "ACTIVE",
+      remindSeason: r.remind_season !== false
+    };
+    if (t.vehicleLifecycleStatus === "SOLD") continue;
+
+    const channel = chooseChannel(t);
+    await withTransaction(async () => {
+      const thread = await getOrCreateThread({
+        organizationId: t.organizationId,
+        vehicleId: r.vehicle_id,
+        wheelSetId: r.wheel_set_id,
+        threadKey: `pickup:wheels:${r.wheel_set_id}`
+      });
+      if (thread.status !== "OPEN") return;
+      if (thread.attempt_count < 3) {
+        if (!channel) {
+          skippedNoContact++;
+          return;
+        }
+        const attempt = await incrementAttempt({ threadId: thread.id });
+        const reminderKey = `pickup:wheels:${r.wheel_set_id}:attempt:${attempt}`;
         const deliveryId = await tryCreateDelivery({
           organizationId: t.organizationId,
           customerId: t.customerId,
-          vehicleId: t.vehicleId,
+          vehicleId: r.vehicle_id ?? t.vehicleId,
           reminderKey
         });
         if (!deliveryId) return;
-        const msg = buildMessage({ kind: "law", targetSeason: "winter", target: t, daysLeft });
+        const msg = buildMessage({ kind: "pickup", targetSeason: "winter", target: t, attempt, delivery: channel.channel });
         const outboxId = await createOutbox({
           organizationId: t.organizationId,
           customerId: t.customerId,
-          vehicleId: t.vehicleId,
+          vehicleId: r.vehicle_id,
           channel: channel.channel,
           recipient: channel.recipient,
           subject: msg.subject,
@@ -286,8 +583,35 @@ export async function runSeasonAndLawReminders(input: {
         });
         await attachOutboxToDelivery({ deliveryId, outboxId });
         enqueued++;
-      });
-    }
+        return;
+      }
+      if (!thread.escalated_at) {
+        const reminderKey = `pickup:wheels:${r.wheel_set_id}:letter`;
+        const deliveryId = await tryCreateDelivery({
+          organizationId: t.organizationId,
+          customerId: t.customerId,
+          vehicleId: r.vehicle_id ?? t.vehicleId,
+          reminderKey
+        });
+        if (!deliveryId) return;
+        const letterRecipient = t.customerAddressLine1
+          ? `${t.customerName ?? "Kund"}\n${t.customerAddressLine1}\n${t.customerPostalCode ?? ""} ${t.customerCity ?? ""}\n${t.customerCountry ?? "SE"}`
+          : `${t.customerName ?? "Kund"} (saknar adress)`;
+        const msg = buildMessage({ kind: "pickup", targetSeason: "winter", target: t, delivery: "letter" });
+        const outboxId = await createOutbox({
+          organizationId: t.organizationId,
+          customerId: t.customerId,
+          vehicleId: r.vehicle_id,
+          channel: "letter",
+          recipient: letterRecipient,
+          subject: `REKOMMENDERAT BREV: ${msg.subject}`,
+          body: `${msg.body}\n\n---\nÅtgärd: Skicka rekommenderat brev (manuellt).`
+        });
+        await attachOutboxToDelivery({ deliveryId, outboxId });
+        await markEscalated({ threadId: thread.id });
+        enqueued++;
+      }
+    });
   }
 
   // Record run

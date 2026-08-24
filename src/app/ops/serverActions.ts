@@ -7,11 +7,13 @@ import {
   lookupByStoragePosition,
   lookupByWheelSetCode
 } from "@/lib/server/search";
+import { markVehicleSoldByRegistration, markWheelSetForgottenByPublicCode } from "@/lib/server/reminderAdmin";
 
 export type CommandResponse =
   | { kind: "navigate"; to: "pick_queue" | "quotes_queue" }
   | { kind: "navigate"; to: "cases" }
   | { kind: "navigate"; to: "integrations" }
+  | { kind: "ok"; message: string }
   | { kind: "vehicle"; data: Awaited<ReturnType<typeof lookupByRegistration>> }
   | {
       kind: "position";
@@ -29,13 +31,29 @@ export async function runCommandAction(input: { text: string }): Promise<Command
     return {
       kind: "unknown",
       message:
-        "Jag förstod inte. Prova regnr (ABC123), hyllkod (A-04-B-12), WS-kod (WS-XXXX), 'ärenden', 'plockkö', 'offerter' eller 'leverantörer'."
+        "Jag förstod inte. Prova regnr (ABC123), hyllkod (A-04-B-12), WS-kod (WS-XXXX), 'ärenden', 'plockkö', 'offerter', 'leverantörer', 'sålt ABC123' eller 'glömt WS-XXXX'."
     };
   }
 
   const { org } = await requireActiveOrg();
 
   if (cmd.kind === "navigate") return { kind: "navigate", to: cmd.to };
+
+  if (cmd.kind === "mark_vehicle_sold") {
+    await markVehicleSoldByRegistration({
+      organizationId: org.id,
+      registrationNumber: cmd.registrationNumber
+    });
+    return { kind: "ok", message: `Markerat ${cmd.registrationNumber} som såld. Påminnelser stoppade.` };
+  }
+
+  if (cmd.kind === "mark_wheels_forgotten") {
+    await markWheelSetForgottenByPublicCode({
+      organizationId: org.id,
+      wheelSetPublicCode: cmd.wheelSetCode
+    });
+    return { kind: "ok", message: `Markerat ${cmd.wheelSetCode} som glömt kvar. Eskalering kan triggas.` };
+  }
 
   if (cmd.kind === "lookup_registration") {
     const data = await lookupByRegistration({

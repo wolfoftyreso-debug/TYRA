@@ -2,6 +2,8 @@ export type Command =
   | { kind: "navigate"; to: "pick_queue" | "quotes_queue" }
   | { kind: "navigate"; to: "cases" }
   | { kind: "navigate"; to: "integrations" }
+  | { kind: "mark_vehicle_sold"; registrationNumber: string }
+  | { kind: "mark_wheels_forgotten"; wheelSetCode: string }
   | { kind: "lookup_registration"; registrationNumber: string }
   | { kind: "lookup_storage_position"; code: string }
   | { kind: "lookup_wheel_set_code"; code: string }
@@ -53,6 +55,16 @@ export function parseCommand(rawInput: string): Command {
     lower === "suppliers"
   ) {
     return { kind: "navigate", to: "integrations" };
+  }
+
+  // Ops shortcuts (instrument commands)
+  if (lower.startsWith("såld ") || lower.startsWith("sålt ") || lower.startsWith("sold ")) {
+    const reg = normalizeUpper(raw.replace(/^(såld|sålt|sold)\s+/i, ""));
+    if (isRegNo(reg)) return { kind: "mark_vehicle_sold", registrationNumber: reg };
+  }
+  if (lower.startsWith("glömt ") || lower.startsWith("glomt ") || lower.startsWith("forgot ")) {
+    const ws = normalizeUpper(raw.replace(/^(glömt|glomt|forgot)\s+/i, ""));
+    if (isWheelSetCode(ws)) return { kind: "mark_wheels_forgotten", wheelSetCode: ws };
   }
 
   if (isRegNo(upper)) return { kind: "lookup_registration", registrationNumber: upper };

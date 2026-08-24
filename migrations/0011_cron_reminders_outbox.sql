@@ -14,7 +14,7 @@ create table if not exists reminder_outbox (
   organization_id uuid not null references organizations(id) on delete cascade,
   customer_id uuid references customers(id) on delete set null,
   vehicle_id uuid references vehicles(id) on delete set null,
-  channel text not null, -- sms|email
+  channel text not null, -- sms|email|letter
   recipient text not null,
   subject text,
   body text not null,
