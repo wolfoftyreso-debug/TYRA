@@ -11,6 +11,7 @@ export type WheelSetSummary = {
 
 export type VehicleLookup = {
   id: string;
+  customer_id: string | null;
   registration_number: string;
   make: string | null;
   model: string | null;
@@ -25,13 +26,14 @@ export async function lookupByRegistration(input: {
 }) {
   const vehicleRes = await query<{
     id: string;
+    customer_id: string | null;
     registration_number: string;
     make: string | null;
     model: string | null;
     model_year: number | null;
     customer_name: string | null;
   }>(
-    `select v.id, v.registration_number, v.make, v.model, v.model_year,
+    `select v.id, v.customer_id, v.registration_number, v.make, v.model, v.model_year,
             c.name as customer_name
      from vehicles v
      left join customers c on c.id = v.customer_id and c.organization_id = v.organization_id

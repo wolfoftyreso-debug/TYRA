@@ -192,6 +192,66 @@ export async function ensureBootstrap(input: { userId: string }) {
     });
     await mkWheelSetLabel(annaSummer);
 
+    // Seed wheels + latest measured tread depths for Anna's mounted summer set (Customer Tire Hub demo)
+    const wheelPositions: Array<["LF" | "RF" | "LR" | "RR", number]> = [
+      ["LF", 3.2],
+      ["RF", 3.1],
+      ["LR", 4.7],
+      ["RR", 4.6]
+    ];
+
+    const inspRes = await client.query<{ id: string }>(
+      `insert into tire_inspections (organization_id, customer_id, vehicle_id, wheel_set_id, captured_at, captured_by_user_id, source)
+       values ($1,$2,$3,$4,$5,$6,$7)
+       returning id`,
+      [organizationId, anna, xc60, annaSummer, nowIso(), input.userId, "PHYSICAL_INSPECTION"]
+    );
+    const inspectionId = inspRes.rows[0]!.id;
+
+    for (const [pos, mm] of wheelPositions) {
+      const wRes = await client.query<{ id: string }>(
+        `insert into wheels (organization_id, wheel_set_id, position)
+         values ($1,$2,$3)
+         returning id`,
+        [organizationId, annaSummer, pos]
+      );
+      const wheelId = wRes.rows[0]!.id;
+
+      await client.query(
+        `insert into tread_measurements (organization_id, wheel_id, measured_at, depth_mm, source, created_by_user_id)
+         values ($1,$2,$3,$4,$5,$6)`,
+        [organizationId, wheelId, nowIso(), mm, "MEASURED", input.userId]
+      );
+
+      await client.query(
+        `insert into tire_inspection_positions (
+           organization_id, inspection_id, position,
+           tread_depth_mm, tread_depth_source, confidence,
+           verified, verified_by_user_id, verified_at,
+           condition_score, condition_state,
+           tyre_brand, tyre_model, tyre_dimension, dot_year, dot_week
+         )
+         values ($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+        [
+          organizationId,
+          inspectionId,
+          pos,
+          mm,
+          "MEASURED",
+          0.99,
+          input.userId,
+          nowIso(),
+          Math.round(((mm - 1.6) / (8.0 - 1.6)) * 100),
+          mm < 3 ? "red" : mm < 4 ? "yellow" : "green",
+          "Michelin",
+          "Primacy 4",
+          "235/55 R19",
+          2022,
+          14
+        ]
+      );
+    }
+
     const erikWinter = await mkWheelSet({
       customerId: erik,
       vehicleId: x5,
@@ -218,6 +278,43 @@ export async function ensureBootstrap(input: { userId: string }) {
         nowIso()
       ]
     );
+
+    // Seed tire products + supplier price snapshots (demo live prices)
+    const products: Array<[string, string, number]> = [
+      ["Michelin", "Primacy 5", 148_000],
+      ["Goodyear", "EfficientGrip", 132_000],
+      ["Hankook", "Ventus Prime", 112_000],
+      ["Kumho", "Ecsta", 99_000]
+    ];
+
+    for (const [brand, model, supplierPriceOre] of products) {
+      const pRes = await client.query<{ id: string }>(
+        `insert into tire_products (
+           organization_id, supplier, supplier_product_id,
+           brand, model, width, profile, rim_diameter, season, active
+         )
+         values ($1,$2,$3,$4,$5,235,55,19,$6,true)
+         returning id`,
+        [organizationId, "DEMO_SUPPLIER", `${brand}-${model}`.toLowerCase(), brand, model, "summer"]
+      );
+      const tireProductId = pRes.rows[0]!.id;
+      await client.query(
+        `insert into tire_price_snapshots (
+           organization_id, tire_product_id, supplier, supplier_price_ore, supplier_price_timestamp, stock_status, estimated_delivery, generated_at
+         )
+         values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          organizationId,
+          tireProductId,
+          "DEMO_SUPPLIER",
+          supplierPriceOre,
+          nowIso(),
+          "in_stock",
+          "2-4 dagar",
+          nowIso()
+        ]
+      );
+    }
 
     // Seed canonical DMS mapping (demo)
     await client.query(

@@ -5,6 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 
 import type { CommandResponse } from "./serverActions";
 import { runCommandAction } from "./serverActions";
+import { HubLinkButton } from "./hub/HubLinkButton";
 
 function pill(text: string) {
   return (
@@ -118,6 +119,8 @@ export function CommandBar() {
               <div className="mt-1 text-sm text-white/70">
                 Kund: {last.data.customer_name ?? "—"}
               </div>
+
+              {last.data.customer_id ? <HubLinkButton customerId={last.data.customer_id} /> : null}
 
               <div className="mt-4 space-y-2">
                 {last.data.wheel_sets.map((ws) => (
