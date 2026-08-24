@@ -299,6 +299,26 @@ export async function ensureBootstrap(input: { userId: string }) {
       ]
     );
 
+    // Seed supplier accounts (TenantSupplierAccount)
+    await client.query(
+      `insert into tenant_supplier_accounts (
+         organization_id, supplier_id, external_customer_id, credentials_reference,
+         currency, enabled, priority, pricing_enabled, ordering_enabled
+       )
+       values
+         ($1,'ntg',null,null,'SEK',true,10,true,false),
+         ($1,'delticom',null,null,'SEK',true,20,true,false),
+         ($1,'inter_sprint',null,null,'SEK',false,30,true,false),
+         ($1,'deldo',null,null,'SEK',false,40,true,false)
+       on conflict (organization_id, supplier_id) do update
+         set enabled = excluded.enabled,
+             priority = excluded.priority,
+             pricing_enabled = excluded.pricing_enabled,
+             ordering_enabled = excluded.ordering_enabled,
+             updated_at = now()`,
+      [organizationId]
+    );
+
     // Seed tire products + supplier price snapshots (demo live prices)
     const products: Array<[string, string, number]> = [
       ["Michelin", "Primacy 5", 148_000],
@@ -315,7 +335,7 @@ export async function ensureBootstrap(input: { userId: string }) {
          )
          values ($1,$2,$3,$4,$5,235,55,19,$6,true)
          returning id`,
-        [organizationId, "DEMO_SUPPLIER", `${brand}-${model}`.toLowerCase(), brand, model, "summer"]
+        [organizationId, "delticom", `${brand}-${model}`.toLowerCase(), brand, model, "summer"]
       );
       const tireProductId = pRes.rows[0]!.id;
       await client.query(
@@ -326,7 +346,7 @@ export async function ensureBootstrap(input: { userId: string }) {
         [
           organizationId,
           tireProductId,
-          "DEMO_SUPPLIER",
+          "delticom",
           supplierPriceOre,
           nowIso(),
           "in_stock",

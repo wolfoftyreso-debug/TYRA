@@ -1,8 +1,10 @@
 import { computeInstalledPrice, type PricingRule } from "@/lib/domain/pricing";
 import { computeTireHealth } from "@/lib/domain/tireHealth";
+import type { SupplierId } from "@/lib/suppliers/types";
 
 import { query, withTransaction } from "./db";
 import { generateOpaqueToken, sha256 } from "./tokens";
+import { getCachedOfferForProduct, searchSupplierProducts } from "./suppliers/gateway";
 
 export async function getOrCreateCustomerHubLink(input: {
   organizationId: string;
@@ -469,31 +471,22 @@ async function computeLiveOptions(input: {
   organizationId: string;
   quantity: number;
 }) {
-  const products = await query<{
-    id: string;
-    brand: string;
-    model: string;
-    season: string;
-    width: number;
-    profile: number;
-    rim_diameter: number;
-    supplier: string | null;
-    supplier_product_id: string | null;
-  }>(
-    `select id, brand, model, season, width, profile, rim_diameter, supplier, supplier_product_id
-     from tire_products
-     where organization_id = $1 and active = true and width = 235 and profile = 55 and rim_diameter = 19
-     order by brand asc
-     limit 10`,
-    [input.organizationId]
-  );
-  if (!products.rows.length) return null;
+  // v1 demo: fixed dimension; later this comes from verified vehicle tyre spec
+  const dim = { width: 235, aspectRatio: 55, rimDiameter: 19 };
+
+  const search = await searchSupplierProducts({
+    organizationId: input.organizationId,
+    identity: dim,
+    limitPerSupplier: 25
+  });
+  const products = search.ok ? search.value : [];
+  if (!products.length) return null;
 
   // Pick three by brand priority (simple): Michelin -> Goodyear -> Hankook/Kumho...
   const priority = ["Michelin", "Goodyear", "Hankook", "Kumho"];
-  const sorted = products.rows.slice().sort((a, b) => {
-    const ai = priority.indexOf(a.brand);
-    const bi = priority.indexOf(b.brand);
+  const sorted = products.slice().sort((a, b) => {
+    const ai = priority.indexOf(a.identity.brand);
+    const bi = priority.indexOf(b.identity.brand);
     return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi);
   });
   const chosen = [sorted[0], sorted[1] ?? sorted[0], sorted[2] ?? sorted[0]];
@@ -517,41 +510,30 @@ async function computeLiveOptions(input: {
 
   for (let i = 0; i < slots.length; i++) {
     const p = chosen[i]!;
-    const snapRes = await query<{
-      supplier: string | null;
-      supplier_price_ore: number;
-      supplier_price_timestamp: string;
-      generated_at: string;
-    }>(
-      `select supplier, supplier_price_ore, supplier_price_timestamp, generated_at
-       from tire_price_snapshots
-       where organization_id = $1 and tire_product_id = $2
-       order by generated_at desc
-       limit 1`,
-      [input.organizationId, p.id]
-    );
-    const snap = snapRes.rows[0];
-    if (!snap) continue;
+    const offer = p.offers[0] ?? null;
+    if (!offer) continue;
+    const expiresAt = Date.parse(offer.expiresAtIso);
+    if (Number.isFinite(expiresAt) && Date.now() > expiresAt) continue;
 
     const pricing = computeInstalledPrice({
-      supplierPriceOre: snap.supplier_price_ore,
+      supplierPriceOre: offer.supplierPriceOre,
       quantity: input.quantity,
       markupRule: rule,
       installationPriceOrePerTyre,
       environmentalFeeOrePerTyre: envFeeOrePerTyre,
-      supplier: snap.supplier,
-      supplierPriceTimestampIso: snap.supplier_price_timestamp,
+      supplier: offer.supplierId,
+      supplierPriceTimestampIso: offer.retrievedAtIso,
       generatedAtIso: nowIso
     });
 
     optionsOut.push({
-      liveOptionId: `${slots[i]}:${p.id}`,
+      liveOptionId: `${slots[i]}:${p.tireProductId}`,
       slot: slots[i],
-      tireProductId: p.id,
-      supplierProductId: p.supplier_product_id ?? null,
-      brand: p.brand,
-      model: p.model,
-      dimension: `${p.width}/${p.profile} R${p.rim_diameter}`,
+      tireProductId: p.tireProductId,
+      supplierProductId: offer.supplierSku ?? null,
+      brand: p.identity.brand,
+      model: p.identity.model,
+      dimension: `${p.identity.width}/${p.identity.aspectRatio} R${p.identity.rimDiameter}`,
       livePrice: pricing
     });
   }
@@ -652,25 +634,17 @@ export async function placeTireOrderFromHub(input: {
     const p = prod.rows[0];
     if (!p) throw new Error("Produkten är inte tillgänglig.");
 
-    const snapRes = await client.query<{
-      supplier: string | null;
-      supplier_price_ore: number;
-      supplier_price_timestamp: string;
-      generated_at: string;
-    }>(
-      `select supplier, supplier_price_ore, supplier_price_timestamp, generated_at
-       from tire_price_snapshots
-       where organization_id = $1 and tire_product_id = $2
-       order by generated_at desc
-       limit 1`,
-      [l.organization_id, p.id]
-    );
-    const snap = snapRes.rows[0];
-    if (!snap) throw new Error("Priset måste uppdateras innan du kan beställa.");
+    const supplierId = (p.supplier ?? "delticom") as SupplierId;
+    const offerRes = await getCachedOfferForProduct({
+      organizationId: l.organization_id,
+      supplierId,
+      tireProductId: p.id
+    });
+    if (!offerRes.ok || !offerRes.value) throw new Error("Priset måste uppdateras innan du kan beställa.");
 
-    // Freshness rule (v1): 24h
-    const ts = Date.parse(snap.supplier_price_timestamp);
-    if (!Number.isFinite(ts) || Date.now() - ts > 24 * 60 * 60 * 1000) {
+    // Freshness rule (v1): require unexpired cache entry (adapter sets expiresAt)
+    const expiresAt = Date.parse(offerRes.value.expiresAtIso);
+    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
       throw new Error("Priset måste uppdateras innan du kan beställa.");
     }
 
@@ -679,13 +653,13 @@ export async function placeTireOrderFromHub(input: {
     const envFeeOrePerTyre = 4_000;
     const nowIso = new Date().toISOString();
     const finalPrice = computeInstalledPrice({
-      supplierPriceOre: snap.supplier_price_ore,
+      supplierPriceOre: offerRes.value.supplierPriceOre,
       quantity: input.quantity,
       markupRule: rule,
       installationPriceOrePerTyre,
       environmentalFeeOrePerTyre: envFeeOrePerTyre,
-      supplier: snap.supplier,
-      supplierPriceTimestampIso: snap.supplier_price_timestamp,
+      supplier: supplierId,
+      supplierPriceTimestampIso: offerRes.value.retrievedAtIso,
       generatedAtIso: nowIso
     });
 
@@ -702,8 +676,8 @@ export async function placeTireOrderFromHub(input: {
     const orderSnapshot = {
       product: {
         tireProductId: p.id,
-        supplier: p.supplier,
-        supplierProductId: p.supplier_product_id,
+        supplier: supplierId,
+        supplierProductId: offerRes.value.supplierSku ?? p.supplier_product_id,
         brand: p.brand,
         model: p.model,
         dimension: `${p.width}/${p.profile} R${p.rim_diameter}`
