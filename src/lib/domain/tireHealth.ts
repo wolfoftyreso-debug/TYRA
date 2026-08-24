@@ -20,6 +20,18 @@ export function computeTireHealth(input: {
   confidence?: number | null;
   verified?: boolean | null;
 }): TireHealth {
+  if (input.verified === false) {
+    return {
+      state: "unknown",
+      label: "Kontroll pågår",
+      percent: null,
+      treadDepthMm: null,
+      treadDepthSource: input.treadDepthSource ?? null,
+      confidence: input.confidence ?? null,
+      verified: input.verified ?? null
+    };
+  }
+
   const td = input.treadDepthMm;
   if (td == null || Number.isNaN(td)) {
     return { state: "unknown", label: "Okänt", percent: null, treadDepthMm: null };

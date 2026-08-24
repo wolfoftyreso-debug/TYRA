@@ -201,10 +201,24 @@ export async function ensureBootstrap(input: { userId: string }) {
     ];
 
     const inspRes = await client.query<{ id: string }>(
-      `insert into tire_inspections (organization_id, customer_id, vehicle_id, wheel_set_id, captured_at, captured_by_user_id, source)
-       values ($1,$2,$3,$4,$5,$6,$7)
+      `insert into tire_inspections (
+         organization_id, customer_id, vehicle_id, wheel_set_id, captured_at, captured_by_user_id, source,
+         inspection_status, verified_at, verified_by_user_id
+       )
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        returning id`,
-      [organizationId, anna, xc60, annaSummer, nowIso(), input.userId, "PHYSICAL_INSPECTION"]
+      [
+        organizationId,
+        anna,
+        xc60,
+        annaSummer,
+        nowIso(),
+        input.userId,
+        "PHYSICAL_INSPECTION",
+        "VERIFIED",
+        nowIso(),
+        input.userId
+      ]
     );
     const inspectionId = inspRes.rows[0]!.id;
 
@@ -229,9 +243,10 @@ export async function ensureBootstrap(input: { userId: string }) {
            tread_depth_mm, tread_depth_source, confidence,
            verified, verified_by_user_id, verified_at,
            condition_score, condition_state,
-           tyre_brand, tyre_model, tyre_dimension, dot_year, dot_week
+           tyre_brand, tyre_model, tyre_dimension, dot_year, dot_week,
+           ai_tread_depth_mm, ai_tread_depth_source, ai_confidence, ai_model_version, ai_suggested_at
          )
-         values ($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+         values ($1,$2,$3,$4,$5,$6,true,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)`,
         [
           organizationId,
           inspectionId,
@@ -247,7 +262,12 @@ export async function ensureBootstrap(input: { userId: string }) {
           "Primacy 4",
           "235/55 R19",
           2022,
-          14
+          14,
+          Math.max(1.6, mm - 0.2), // AI-suggested (demo)
+          "AI_ESTIMATE",
+          0.84,
+          "tire-vision-demo-v0.1",
+          nowIso()
         ]
       );
     }

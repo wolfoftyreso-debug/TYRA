@@ -135,7 +135,7 @@ export async function getHubViewByToken(input: { token: string }) {
           `with latest as (
              select id
              from tire_inspections
-             where organization_id = $1 and wheel_set_id = $2
+             where organization_id = $1 and wheel_set_id = $2 and inspection_status = 'VERIFIED'
              order by captured_at desc
              limit 1
            )
@@ -161,15 +161,15 @@ export async function getHubViewByToken(input: { token: string }) {
     byPos.set(r.position, {
       position: r.position,
       health: computeTireHealth({
-        treadDepthMm: r.tread_depth_mm,
+        treadDepthMm: r.verified === true ? r.tread_depth_mm : null,
         treadDepthSource: r.tread_depth_source,
         confidence: r.confidence,
         verified: r.verified
       }),
       tyre: {
-        brand: r.tyre_brand,
-        model: r.tyre_model,
-        dimension: r.tyre_dimension,
+        brand: r.verified === true ? r.tyre_brand : null,
+        model: r.verified === true ? r.tyre_model : null,
+        dimension: r.verified === true ? r.tyre_dimension : null,
         dotYear: r.dot_year
       }
     });
