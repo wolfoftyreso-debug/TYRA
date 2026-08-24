@@ -54,5 +54,57 @@ describe("computeTireWarnings", () => {
     expect(res.positionWarnings["LF"].some((w) => w.code === "DOT_OLD")).toBe(true);
     expect(res.positionWarnings["RF"].some((w) => w.code === "DOT_AGING" || w.code === "DOT_OLD")).toBe(true);
   });
+
+  test("flags rim safety as blocked and cosmetic as attention", () => {
+    const res1 = computeTireWarnings({
+      now: new Date("2026-06-01T00:00:00.000Z"),
+      positions: [
+        {
+          position: "LF",
+          verified: true,
+          treadDepthMm: 6,
+          tyreBrand: "A",
+          tyreModel: null,
+          tyreDimension: "205/55 R16",
+          dotWeek: null,
+          dotYear: 2024,
+          valveAgeYears: null,
+          valveCondition: null,
+          rimSeverity: "SAFETY",
+          rimDamageTypes: ["crack"],
+          rimNotes: null,
+          wearPattern: null,
+          damageTypes: [],
+          notes: null
+        }
+      ]
+    });
+    expect(res1.positionWarnings["LF"].some((w) => w.code === "RIM_SAFETY" && w.tone === "blocked")).toBe(true);
+
+    const res2 = computeTireWarnings({
+      now: new Date("2026-06-01T00:00:00.000Z"),
+      positions: [
+        {
+          position: "LF",
+          verified: true,
+          treadDepthMm: 6,
+          tyreBrand: "A",
+          tyreModel: null,
+          tyreDimension: "205/55 R16",
+          dotWeek: null,
+          dotYear: 2024,
+          valveAgeYears: null,
+          valveCondition: null,
+          rimSeverity: "COSMETIC",
+          rimDamageTypes: ["curb_rash"],
+          rimNotes: null,
+          wearPattern: null,
+          damageTypes: [],
+          notes: null
+        }
+      ]
+    });
+    expect(res2.positionWarnings["LF"].some((w) => w.code === "RIM_COSMETIC" && w.tone === "attention")).toBe(true);
+  });
 });
 

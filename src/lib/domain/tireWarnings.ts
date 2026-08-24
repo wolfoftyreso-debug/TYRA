@@ -18,6 +18,9 @@ export type TirePositionInput = {
   dotYear: number | null;
   valveAgeYears?: number | null;
   valveCondition?: string | null;
+  rimSeverity?: string | null; // OK|COSMETIC|SAFETY
+  rimDamageTypes?: string[] | null;
+  rimNotes?: string | null;
   wearPattern: string | null;
   damageTypes: string[] | null;
   notes: string | null;
@@ -167,6 +170,25 @@ export function computeTireWarnings(input: {
       w.push({ tone: "blocked", code: "VALVE_LEAK", title: "Ventil läcker" });
     } else if (valveCond === "CRACKED" || valveCond === "SPRICK" || valveCond === "AGING") {
       w.push({ tone: "attention", code: "VALVE_CONDITION", title: "Ventil behöver bytas" });
+    }
+
+    // Rim damage: cosmetic vs safety risk
+    const rimSeverity = p.rimSeverity ? normToken(p.rimSeverity) : null;
+    const rimDamage = (p.rimDamageTypes ?? []).filter(Boolean).map(normToken);
+    const rimNotes = p.rimNotes ? normToken(p.rimNotes) : "";
+    const rimSafetyTokens = ["CRACK", "SPRICK", "BEND", "SKEV", "LEAK", "LÄCK", "BROKEN", "BROTT"];
+    const rimIsSafety =
+      rimSeverity === "SAFETY" ||
+      includesAnyToken(rimDamage, rimSafetyTokens) ||
+      rimSafetyTokens.some((t) => rimNotes.includes(t));
+    const rimIsCosmetic =
+      rimSeverity === "COSMETIC" ||
+      includesAnyToken(rimDamage, ["CURB", "RASH", "SKRAP", "SKADA", "KOSMET"]) ||
+      (rimSeverity && rimSeverity !== "OK" && !rimIsSafety);
+    if (rimIsSafety) {
+      w.push({ tone: "blocked", code: "RIM_SAFETY", title: "Trafikfarlig fälgskada" });
+    } else if (rimIsCosmetic) {
+      w.push({ tone: "attention", code: "RIM_COSMETIC", title: "Kosmetisk fälgskada" });
     }
 
     // Damage / cracks / studs

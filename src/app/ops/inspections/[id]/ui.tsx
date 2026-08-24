@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { StatusBanner, StatusBadge } from "@/components/ui/Status";
 import { computeTireWarnings } from "@/lib/domain/tireWarnings";
 
-import { confirmAllAction, setTreadDepthAction, setValveAgeAction } from "./serverActions";
+import { confirmAllAction, setTreadDepthAction, setValveAgeAction, setRimSeverityAction } from "./serverActions";
 
 type Row = {
   id: string;
@@ -29,6 +29,7 @@ type Row = {
   notes?: string | null;
   valve_age_years?: number | null;
   valve_condition?: string | null;
+  rim_severity?: string | null;
 };
 
 function warningToneLabel(warnings: Array<{ tone: string; title: string; detail?: string | null }> | null | undefined) {
@@ -75,6 +76,7 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
         dotYear: r.dot_year ?? null,
         valveAgeYears: r.valve_age_years ?? null,
         valveCondition: r.valve_condition ?? null,
+        rimSeverity: r.rim_severity ?? null,
         wearPattern: r.wear_pattern ?? null,
         damageTypes: (r.damage_types as any) ?? null,
         notes: r.notes ?? null
@@ -172,6 +174,17 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                   )}
                   {r.valve_condition ? <span className="ml-2 text-[var(--tyra-subtle)]">{r.valve_condition}</span> : null}
                 </div>
+
+                <div className="mt-2 text-sm text-[var(--tyra-muted)]">
+                  Fälg:{" "}
+                  {r.rim_severity ? (
+                    <span className="font-medium">
+                      {r.rim_severity === "SAFETY" ? "Trafikfarlig" : r.rim_severity === "COSMETIC" ? "Kosmetisk" : "OK"}
+                    </span>
+                  ) : (
+                    <span className="text-[var(--tyra-subtle)]">—</span>
+                  )}
+                </div>
               </div>
 
               <div className="w-44">
@@ -253,6 +266,81 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                 >
                   Spara ventil
                 </Button>
+
+                <div className="mt-4 text-xs font-medium text-[var(--tyra-muted)]">Fälg</div>
+                <div className="mt-2 grid gap-2">
+                  <Button
+                    disabled={isPending}
+                    tone="secondary"
+                    size="lg"
+                    className="w-full"
+                    onClick={() => {
+                      setErr(null);
+                      setOk(null);
+                      startTransition(async () => {
+                        try {
+                          await setRimSeverityAction({ inspectionId: props.inspectionId, position: r.position, rimSeverity: "OK" });
+                          setOk(`${posLabel(r.position)} fälg: OK`);
+                          router.refresh();
+                        } catch (e) {
+                          setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                        }
+                      });
+                    }}
+                  >
+                    Fälg OK
+                  </Button>
+                  <Button
+                    disabled={isPending}
+                    tone="secondary"
+                    size="lg"
+                    className="w-full"
+                    onClick={() => {
+                      setErr(null);
+                      setOk(null);
+                      startTransition(async () => {
+                        try {
+                          await setRimSeverityAction({
+                            inspectionId: props.inspectionId,
+                            position: r.position,
+                            rimSeverity: "COSMETIC"
+                          });
+                          setOk(`${posLabel(r.position)} fälg: kosmetisk skada`);
+                          router.refresh();
+                        } catch (e) {
+                          setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                        }
+                      });
+                    }}
+                  >
+                    Kosmetisk
+                  </Button>
+                  <Button
+                    disabled={isPending}
+                    tone="destructive"
+                    size="lg"
+                    className="w-full"
+                    onClick={() => {
+                      setErr(null);
+                      setOk(null);
+                      startTransition(async () => {
+                        try {
+                          await setRimSeverityAction({
+                            inspectionId: props.inspectionId,
+                            position: r.position,
+                            rimSeverity: "SAFETY"
+                          });
+                          setOk(`${posLabel(r.position)} fälg: trafikfarlig skada`);
+                          router.refresh();
+                        } catch (e) {
+                          setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                        }
+                      });
+                    }}
+                  >
+                    Trafikfarlig
+                  </Button>
+                </div>
               </div>
             </div>
           </Card>

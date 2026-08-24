@@ -21,6 +21,9 @@ export type InspectionPositionRow = {
   valve_age_years?: number | null;
   valve_condition?: string | null;
   valve_notes?: string | null;
+  rim_severity?: string | null;
+  rim_damage_types?: string[] | null;
+  rim_notes?: string | null;
 };
 
 export async function getInspection(input: { organizationId: string; inspectionId: string }) {
@@ -45,7 +48,8 @@ export async function getInspection(input: { organizationId: string; inspectionI
       `select id, position, tread_depth_mm, tread_depth_source, verified, confidence,
               ai_tread_depth_mm, ai_confidence, ai_model_version,
               wear_pattern, damage_types, tyre_brand, tyre_model, tyre_dimension, dot_week, dot_year, notes,
-              valve_age_years, valve_condition, valve_notes
+              valve_age_years, valve_condition, valve_notes,
+              rim_severity, rim_damage_types, rim_notes
        from tire_inspection_positions
        where organization_id = $1 and inspection_id = $2
        order by position asc`,
@@ -187,6 +191,41 @@ export async function setValveStemAge(input: {
         input.inspectionId,
         input.position
       ]
+    );
+
+    const remaining = await client.query<{ c: string }>(
+      `select count(*)::text as c
+       from tire_inspection_positions
+       where organization_id = $1 and inspection_id = $2 and verified != true`,
+      [input.organizationId, input.inspectionId]
+    );
+    if (Number(remaining.rows[0]?.c ?? "0") === 0) {
+      await client.query(
+        `update tire_inspections
+         set inspection_status = 'VERIFIED', verified_at = now(), verified_by_user_id = $1
+         where organization_id = $2 and id = $3`,
+        [input.actorUserId, input.organizationId, input.inspectionId]
+      );
+    }
+  });
+}
+
+export async function setRimSeverity(input: {
+  organizationId: string;
+  inspectionId: string;
+  position: string;
+  rimSeverity: "OK" | "COSMETIC" | "SAFETY";
+  actorUserId: string;
+}) {
+  return withTransaction(async (client) => {
+    await client.query(
+      `update tire_inspection_positions
+       set rim_severity = $1,
+           verified = true,
+           verified_by_user_id = $2,
+           verified_at = now()
+       where organization_id = $3 and inspection_id = $4 and position = $5`,
+      [input.rimSeverity, input.actorUserId, input.organizationId, input.inspectionId, input.position]
     );
 
     const remaining = await client.query<{ c: string }>(

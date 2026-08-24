@@ -1,7 +1,7 @@
 "use server";
 
 import { requireActiveOrg } from "@/lib/server/session";
-import { confirmAllPositions, setTechnicianTreadDepth, setValveStemAge } from "@/lib/server/inspections";
+import { confirmAllPositions, setTechnicianTreadDepth, setValveStemAge, setRimSeverity } from "@/lib/server/inspections";
 
 export async function confirmAllAction(input: { inspectionId: string }) {
   const { org, userId } = await requireActiveOrg();
@@ -38,6 +38,22 @@ export async function setValveAgeAction(input: {
     position: input.position,
     valveAgeYears: input.valveAgeYears,
     valveCondition: input.valveCondition ?? null,
+    actorUserId: userId
+  });
+  return { ok: true as const };
+}
+
+export async function setRimSeverityAction(input: {
+  inspectionId: string;
+  position: string;
+  rimSeverity: "OK" | "COSMETIC" | "SAFETY";
+}) {
+  const { org, userId } = await requireActiveOrg();
+  await setRimSeverity({
+    organizationId: org.id,
+    inspectionId: input.inspectionId,
+    position: input.position,
+    rimSeverity: input.rimSeverity,
     actorUserId: userId
   });
   return { ok: true as const };
