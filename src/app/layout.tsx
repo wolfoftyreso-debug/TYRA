@@ -3,8 +3,8 @@ import "./globals.css";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Tyra",
-  description: "Tire operations system"
+  title: "Däckhotellet",
+  description: "Verkstads- och däckhotellsystem"
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

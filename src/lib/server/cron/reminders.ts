@@ -49,42 +49,44 @@ function buildMessage(input: {
   kind: "season" | "law" | "pickup";
   targetSeason: "winter" | "summer";
   target: ReminderTarget;
+  senderName: string;
   daysLeft?: number;
   attempt?: number;
   delivery?: "sms" | "email" | "letter";
 }): { subject: string; body: string } {
   const name = input.target.customerName ?? "Hej";
   const v = vehicleLabel(input.target);
+  const sender = input.senderName || "Verkstaden";
 
   if (input.kind === "pickup") {
     return {
       subject: `Påminnelse: hjul kvar hos verkstaden (${input.target.registrationNumber})`,
-      body: `${name}!\n\nVi har ett hjulset kvar hos oss för ${v}.\nHör av dig så löser vi utlämning eller hur du vill göra.\n\n/ TYRA`
+      body: `${name}!\n\nVi har ett hjulset kvar hos oss för ${v}.\nHör av dig så löser vi utlämning eller hur du vill göra.\n\n/ ${sender}`
     };
   }
 
   if (input.kind === "season" && input.targetSeason === "winter") {
     return {
       subject: `Påminnelse: dags att byta till vinterhjul (${input.target.registrationNumber})`,
-      body: `${name}!\n\nDet börjar bli dags att byta till vinterhjul för ${v}.\nVill du att vi bokar en tid och förbereder hjulen?\n\n/ TYRA`
+      body: `${name}!\n\nDet börjar bli dags att byta till vinterhjul för ${v}.\nVill du att vi bokar en tid och förbereder hjulen?\n\n/ ${sender}`
     };
   }
   if (input.kind === "season" && input.targetSeason === "summer") {
     return {
       subject: `Påminnelse: dags att byta till sommarhjul (${input.target.registrationNumber})`,
-      body: `${name}!\n\nDet börjar bli dags att byta till sommarhjul för ${v}.\nVill du att vi bokar en tid och förbereder hjulen?\n\n/ TYRA`
+      body: `${name}!\n\nDet börjar bli dags att byta till sommarhjul för ${v}.\nVill du att vi bokar en tid och förbereder hjulen?\n\n/ ${sender}`
     };
   }
   if (input.kind === "law" && input.targetSeason === "winter") {
     const left = input.daysLeft != null ? ` Det är ${input.daysLeft} dagar kvar.` : "";
     return {
       subject: `Viktigt: vinterdäck närmar sig (${input.target.registrationNumber})`,
-      body: `${name}!\n\nFör ${v} verkar du inte ha vinterhjul monterade just nu.${left}\nBehöver du hjälp att byta i tid? Svara på detta meddelande eller boka en tid.\n\n/ TYRA`
+      body: `${name}!\n\nFör ${v} verkar du inte ha vinterhjul monterade just nu.${left}\nBehöver du hjälp att byta i tid? Svara på detta meddelande eller boka en tid.\n\n/ ${sender}`
     };
   }
   return {
     subject: `Påminnelse (${input.target.registrationNumber})`,
-    body: `${name}!\n\nPåminnelse för ${v}.\n\n/ TYRA`
+    body: `${name}!\n\nPåminnelse för ${v}.\n\n/ ${sender}`
   };
 }
 
@@ -260,6 +262,7 @@ export async function runSeasonAndLawReminders(input: {
   const now = input.now ?? new Date();
   const year = now.getFullYear();
   const policies = await getOrgPolicies({ organizationId: input.organizationId });
+  const senderName = policies.name || "Verkstaden";
 
   // Sweden defaults (v1). Later: org-specific policies.
   const winterSeasonWindowStart = new Date(`${year}-10-01T00:00:00.000Z`);
@@ -315,7 +318,14 @@ export async function runSeasonAndLawReminders(input: {
             reminderKey
           });
           if (!deliveryId) return;
-          const msg = buildMessage({ kind: "season", targetSeason: "winter", target: t, attempt, delivery: channel.channel });
+          const msg = buildMessage({
+            kind: "season",
+            targetSeason: "winter",
+            target: t,
+            senderName,
+            attempt,
+            delivery: channel.channel
+          });
           const outboxId = await createOutbox({
             organizationId: t.organizationId,
             customerId: t.customerId,
@@ -341,7 +351,7 @@ export async function runSeasonAndLawReminders(input: {
           const letterRecipient = t.customerAddressLine1
             ? `${t.customerName ?? "Kund"}\n${t.customerAddressLine1}\n${t.customerPostalCode ?? ""} ${t.customerCity ?? ""}\n${t.customerCountry ?? "SE"}`
             : `${t.customerName ?? "Kund"} (saknar adress)`;
-          const msg = buildMessage({ kind: "season", targetSeason: "winter", target: t, delivery: "letter" });
+          const msg = buildMessage({ kind: "season", targetSeason: "winter", target: t, senderName, delivery: "letter" });
           const outboxId = await createOutbox({
             organizationId: t.organizationId,
             customerId: t.customerId,
@@ -380,7 +390,14 @@ export async function runSeasonAndLawReminders(input: {
             reminderKey
           });
           if (!deliveryId) return;
-          const msg = buildMessage({ kind: "season", targetSeason: "summer", target: t, attempt, delivery: channel.channel });
+          const msg = buildMessage({
+            kind: "season",
+            targetSeason: "summer",
+            target: t,
+            senderName,
+            attempt,
+            delivery: channel.channel
+          });
           const outboxId = await createOutbox({
             organizationId: t.organizationId,
             customerId: t.customerId,
@@ -406,7 +423,7 @@ export async function runSeasonAndLawReminders(input: {
           const letterRecipient = t.customerAddressLine1
             ? `${t.customerName ?? "Kund"}\n${t.customerAddressLine1}\n${t.customerPostalCode ?? ""} ${t.customerCity ?? ""}\n${t.customerCountry ?? "SE"}`
             : `${t.customerName ?? "Kund"} (saknar adress)`;
-          const msg = buildMessage({ kind: "season", targetSeason: "summer", target: t, delivery: "letter" });
+          const msg = buildMessage({ kind: "season", targetSeason: "summer", target: t, senderName, delivery: "letter" });
           const outboxId = await createOutbox({
             organizationId: t.organizationId,
             customerId: t.customerId,
@@ -448,7 +465,15 @@ export async function runSeasonAndLawReminders(input: {
             reminderKey
           });
           if (!deliveryId) return;
-          const msg = buildMessage({ kind: "law", targetSeason: "winter", target: t, daysLeft, attempt, delivery: channel.channel });
+          const msg = buildMessage({
+            kind: "law",
+            targetSeason: "winter",
+            target: t,
+            senderName,
+            daysLeft,
+            attempt,
+            delivery: channel.channel
+          });
           const outboxId = await createOutbox({
             organizationId: t.organizationId,
             customerId: t.customerId,
@@ -474,7 +499,7 @@ export async function runSeasonAndLawReminders(input: {
           const letterRecipient = t.customerAddressLine1
             ? `${t.customerName ?? "Kund"}\n${t.customerAddressLine1}\n${t.customerPostalCode ?? ""} ${t.customerCity ?? ""}\n${t.customerCountry ?? "SE"}`
             : `${t.customerName ?? "Kund"} (saknar adress)`;
-          const msg = buildMessage({ kind: "law", targetSeason: "winter", target: t, daysLeft, delivery: "letter" });
+          const msg = buildMessage({ kind: "law", targetSeason: "winter", target: t, senderName, daysLeft, delivery: "letter" });
           const outboxId = await createOutbox({
             organizationId: t.organizationId,
             customerId: t.customerId,
@@ -584,7 +609,7 @@ export async function runSeasonAndLawReminders(input: {
           reminderKey
         });
         if (!deliveryId) return;
-        const msg = buildMessage({ kind: "pickup", targetSeason: "winter", target: t, attempt, delivery: channel.channel });
+        const msg = buildMessage({ kind: "pickup", targetSeason: "winter", target: t, senderName, attempt, delivery: channel.channel });
         const outboxId = await createOutbox({
           organizationId: t.organizationId,
           customerId: t.customerId,
@@ -610,7 +635,7 @@ export async function runSeasonAndLawReminders(input: {
         const letterRecipient = t.customerAddressLine1
           ? `${t.customerName ?? "Kund"}\n${t.customerAddressLine1}\n${t.customerPostalCode ?? ""} ${t.customerCity ?? ""}\n${t.customerCountry ?? "SE"}`
           : `${t.customerName ?? "Kund"} (saknar adress)`;
-        const msg = buildMessage({ kind: "pickup", targetSeason: "winter", target: t, delivery: "letter" });
+        const msg = buildMessage({ kind: "pickup", targetSeason: "winter", target: t, senderName, delivery: "letter" });
         const outboxId = await createOutbox({
           organizationId: t.organizationId,
           customerId: t.customerId,
