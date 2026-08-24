@@ -5,6 +5,7 @@ import { createBookingFromHub, updateCommPrefsFromHub } from "@/lib/server/hub";
 export async function updatePrefsAction(input: {
   token: string;
   level: "fewer" | "normal" | "updated";
+  pressureProfile: "light" | "normal" | "full";
   remindWornTires: boolean;
   remindPrices: boolean;
   remindSeason: boolean;

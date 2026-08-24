@@ -53,6 +53,8 @@ export type HubPositionView = {
   position: HubWheelPosition;
   health: ReturnType<typeof computeTireHealth>;
   warnings: TireWarning[];
+  pressureKpa: number | null;
+  inflationState: string | null;
   tyre: {
     brand: string | null;
     model: string | null;
@@ -265,6 +267,8 @@ export async function getHubViewByToken(input: { token: string }) {
         verified: r.verified
       }),
       warnings: [],
+      pressureKpa: r.tyre_pressure_kpa ?? null,
+      inflationState: r.inflation_state ?? null,
       tyre: {
         brand: r.verified === true ? r.tyre_brand : null,
         model: r.verified === true ? r.tyre_model : null,
@@ -308,6 +312,8 @@ export async function getHubViewByToken(input: { token: string }) {
         position: p,
         health: computeTireHealth({ treadDepthMm: null }),
         warnings: warnings.positionWarnings[p] ?? [],
+        pressureKpa: null,
+        inflationState: null,
         tyre: { brand: null, model: null, dimension: null, dotYear: null }
       }
     );
@@ -417,13 +423,14 @@ async function getOrCreateCommPrefs(input: { organizationId: string; customerId:
     remind_season: boolean;
     remind_bookings: boolean;
     remind_storage: boolean;
+    pressure_profile: string;
   }>(
     `insert into customer_communication_preferences (
        organization_id, customer_id
      )
      values ($1,$2)
      on conflict (organization_id, customer_id) do update set updated_at = now()
-     returning level, remind_worn_tires, remind_prices, remind_season, remind_bookings, remind_storage`,
+     returning level, remind_worn_tires, remind_prices, remind_season, remind_bookings, remind_storage, pressure_profile`,
     [input.organizationId, input.customerId]
   );
   return res.rows[0]!;
@@ -432,6 +439,7 @@ async function getOrCreateCommPrefs(input: { organizationId: string; customerId:
 export async function updateCommPrefsFromHub(input: {
   token: string;
   level: "fewer" | "normal" | "updated";
+  pressureProfile: "light" | "normal" | "full";
   remindWornTires: boolean;
   remindPrices: boolean;
   remindSeason: boolean;
@@ -452,15 +460,17 @@ export async function updateCommPrefsFromHub(input: {
   await query(
     `update customer_communication_preferences
      set level = $1,
-         remind_worn_tires = $2,
-         remind_prices = $3,
-         remind_season = $4,
-         remind_bookings = $5,
-         remind_storage = $6,
+         pressure_profile = $2,
+         remind_worn_tires = $3,
+         remind_prices = $4,
+         remind_season = $5,
+         remind_bookings = $6,
+         remind_storage = $7,
          updated_at = now()
-     where organization_id = $7 and customer_id = $8`,
+     where organization_id = $8 and customer_id = $9`,
     [
       input.level,
+      input.pressureProfile,
       input.remindWornTires,
       input.remindPrices,
       input.remindSeason,

@@ -13,6 +13,7 @@ export function RelationshipClient(props: {
   commercialState: string;
   prefs: {
     level: string;
+    pressure_profile: string;
     remind_worn_tires: boolean;
     remind_prices: boolean;
     remind_season: boolean;
@@ -22,6 +23,9 @@ export function RelationshipClient(props: {
 }) {
   const [isPending, startTransition] = useTransition();
   const [level, setLevel] = useState(props.prefs.level);
+  const [pressureProfile, setPressureProfile] = useState<"light" | "normal" | "full">(
+    (props.prefs.pressure_profile as any) ?? "normal"
+  );
   const [flags, setFlags] = useState({
     remindWornTires: props.prefs.remind_worn_tires,
     remindPrices: props.prefs.remind_prices,
@@ -81,9 +85,21 @@ export function RelationshipClient(props: {
             </select>
           </label>
 
-          <div className="text-xs text-[var(--tyra-subtle)]">
-            Inställningarna gäller denna TYRA-länk och kan ändras när som helst.
-          </div>
+          <label className="block">
+            <div className="text-xs font-medium text-[var(--tyra-muted)]">Önskat lufttryck</div>
+            <select
+              value={pressureProfile}
+              onChange={(e) => setPressureProfile(e.target.value)}
+              className="mt-2 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-sm outline-none"
+            >
+              <option value="light">Ingen last</option>
+              <option value="normal">Mellan</option>
+              <option value="full">Full last</option>
+            </select>
+            <div className="mt-2 text-xs text-[var(--tyra-subtle)]">
+              Vi använder detta som standard vid kontroll/påfyllning. (Exakta kPa kan skilja per bil och däck.)
+            </div>
+          </label>
         </div>
 
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -119,6 +135,7 @@ export function RelationshipClient(props: {
               await updatePrefsAction({
                 token: props.token,
                 level: level as any,
+                pressureProfile,
                 ...flags
               });
               setMsg("Dina inställningar är uppdaterade.");

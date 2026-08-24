@@ -32,6 +32,16 @@ function posLabel(p: string) {
   return p;
 }
 
+function isRearPosition(p: string) {
+  return p === "LR" || p === "RR" || p === "LRO" || p === "LRI" || p === "RRO" || p === "RRI";
+}
+
+function targetPressureKpa(profile: string, position: string) {
+  if (position === "SPARE") return null;
+  const base = profile === "light" ? 230 : profile === "full" ? 270 : 250; // normal default
+  return base + (isRearPosition(position) ? 10 : 0);
+}
+
 export default async function HubPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const view = await getHubViewByToken({ token });
@@ -120,6 +130,9 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
                   <div className="text-sm font-medium">{posLabel(p.position)}</div>
                   <div className="text-xs text-[var(--tyra-muted)]">{p.health.label}</div>
                 </div>
+                {p.tyre.dimension ? (
+                  <div className="mt-1 text-xs text-[var(--tyra-subtle)]">{p.tyre.dimension}</div>
+                ) : null}
 
                 <div className="mt-3">
                   <div className="h-2 w-full rounded-full bg-black/10">
@@ -138,6 +151,18 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
                       <span className="ml-2 text-xs text-[var(--tyra-subtle)]">{p.health.treadDepthSource}</span>
                     ) : null}
                   </div>
+
+                  <div className="mt-2 text-xs text-[var(--tyra-muted)]">
+                    {(() => {
+                      const target = targetPressureKpa(view.prefs.pressure_profile, p.position);
+                      const now = p.pressureKpa;
+                      const parts: string[] = [];
+                      parts.push(`Tryck: ${now != null ? `${Math.round(now)} kPa` : "—"}`);
+                      if (target != null) parts.push(`Mål: ${target} kPa`);
+                      return parts.join(" • ");
+                    })()}
+                  </div>
+
                   {(() => {
                     const wl = warningLabel((p as any).warnings);
                     return wl ? <div className={`mt-2 text-xs font-medium ${wl.cls}`}>{wl.text}</div> : null;
