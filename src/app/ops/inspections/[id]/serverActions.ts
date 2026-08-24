@@ -1,7 +1,7 @@
 "use server";
 
 import { requireActiveOrg } from "@/lib/server/session";
-import { confirmAllPositions, setTechnicianTreadDepth, setValveStemAge, setRimSeverity } from "@/lib/server/inspections";
+import { confirmAllPositions, setTechnicianTreadDepth, setValveStemAge, setRimSeverity, setInflationState } from "@/lib/server/inspections";
 
 export async function confirmAllAction(input: { inspectionId: string }) {
   const { org, userId } = await requireActiveOrg();
@@ -54,6 +54,24 @@ export async function setRimSeverityAction(input: {
     inspectionId: input.inspectionId,
     position: input.position,
     rimSeverity: input.rimSeverity,
+    actorUserId: userId
+  });
+  return { ok: true as const };
+}
+
+export async function setInflationAction(input: {
+  inspectionId: string;
+  position: string;
+  inflationState: "OK" | "LOW" | "FLAT" | "UNKNOWN";
+  tyrePressureKpa?: number | null;
+}) {
+  const { org, userId } = await requireActiveOrg();
+  await setInflationState({
+    organizationId: org.id,
+    inspectionId: input.inspectionId,
+    position: input.position,
+    inflationState: input.inflationState,
+    tyrePressureKpa: input.tyrePressureKpa ?? null,
     actorUserId: userId
   });
   return { ok: true as const };

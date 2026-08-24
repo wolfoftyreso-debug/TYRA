@@ -106,5 +106,35 @@ describe("computeTireWarnings", () => {
     });
     expect(res2.positionWarnings["LF"].some((w) => w.code === "RIM_COSMETIC" && w.tone === "attention")).toBe(true);
   });
+
+  test("flags flat/low inflation", () => {
+    const res = computeTireWarnings({
+      now: new Date("2026-06-01T00:00:00.000Z"),
+      positions: [
+        {
+          position: "LF",
+          verified: true,
+          treadDepthMm: 6,
+          tyreBrand: "A",
+          tyreModel: null,
+          tyreDimension: "205/55 R16",
+          dotWeek: null,
+          dotYear: 2024,
+          valveAgeYears: null,
+          valveCondition: null,
+          rimSeverity: "OK",
+          rimDamageTypes: [],
+          rimNotes: null,
+          tyrePressureKpa: 80,
+          inflationState: "FLAT",
+          wearPattern: null,
+          damageTypes: [],
+          notes: null
+        }
+      ]
+    });
+    expect(res.positionWarnings["LF"].some((w) => w.code === "INFLATION_FLAT" && w.tone === "blocked")).toBe(true);
+    expect(res.positionWarnings["LF"].some((w) => w.code === "PRESSURE_VERY_LOW" && w.tone === "blocked")).toBe(true);
+  });
 });
 

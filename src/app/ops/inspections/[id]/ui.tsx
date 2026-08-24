@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { StatusBanner, StatusBadge } from "@/components/ui/Status";
 import { computeTireWarnings } from "@/lib/domain/tireWarnings";
 
-import { confirmAllAction, setTreadDepthAction, setValveAgeAction, setRimSeverityAction } from "./serverActions";
+import { confirmAllAction, setTreadDepthAction, setValveAgeAction, setRimSeverityAction, setInflationAction } from "./serverActions";
 
 type Row = {
   id: string;
@@ -30,6 +30,8 @@ type Row = {
   valve_age_years?: number | null;
   valve_condition?: string | null;
   rim_severity?: string | null;
+  tyre_pressure_kpa?: number | null;
+  inflation_state?: string | null;
 };
 
 function warningToneLabel(warnings: Array<{ tone: string; title: string; detail?: string | null }> | null | undefined) {
@@ -54,6 +56,14 @@ function posLabel(p: string) {
   return p;
 }
 
+function parseKpa(s: string | undefined) {
+  const raw = (s ?? "").trim();
+  if (!raw) return null;
+  const v = Number(raw.replace(",", "."));
+  if (!Number.isFinite(v)) return NaN;
+  return Math.trunc(v);
+}
+
 export function InspectionReviewClient(props: { inspectionId: string; rows: Row[] }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -61,6 +71,7 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
   const [ok, setOk] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [valveDraft, setValveDraft] = useState<Record<string, string>>({});
+  const [pressureDraft, setPressureDraft] = useState<Record<string, string>>({});
 
   const warnings = useMemo(() => {
     return computeTireWarnings({
@@ -77,6 +88,8 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
         valveAgeYears: r.valve_age_years ?? null,
         valveCondition: r.valve_condition ?? null,
         rimSeverity: r.rim_severity ?? null,
+        tyrePressureKpa: r.tyre_pressure_kpa ?? null,
+        inflationState: r.inflation_state ?? null,
         wearPattern: r.wear_pattern ?? null,
         damageTypes: (r.damage_types as any) ?? null,
         notes: r.notes ?? null
@@ -184,6 +197,26 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                   ) : (
                     <span className="text-[var(--tyra-subtle)]">—</span>
                   )}
+                </div>
+
+                <div className="mt-2 text-sm text-[var(--tyra-muted)]">
+                  Luft:{" "}
+                  {r.inflation_state ? (
+                    <span className="font-medium">
+                      {r.inflation_state === "FLAT"
+                        ? "Platt"
+                        : r.inflation_state === "LOW"
+                          ? "Lågt"
+                          : r.inflation_state === "OK"
+                            ? "OK"
+                            : r.inflation_state}
+                    </span>
+                  ) : (
+                    <span className="text-[var(--tyra-subtle)]">—</span>
+                  )}
+                  {r.tyre_pressure_kpa != null ? (
+                    <span className="ml-2 text-[var(--tyra-subtle)]">{r.tyre_pressure_kpa} kPa</span>
+                  ) : null}
                 </div>
               </div>
 
@@ -339,6 +372,122 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                     }}
                   >
                     Trafikfarlig
+                  </Button>
+                </div>
+
+                <div className="mt-4 text-xs font-medium text-[var(--tyra-muted)]">Luft (kPa)</div>
+                <input
+                  value={pressureDraft[r.position] ?? ""}
+                  onChange={(e) => setPressureDraft((d) => ({ ...d, [r.position]: e.target.value }))}
+                  placeholder="t.ex 230"
+                  inputMode="numeric"
+                  className="mt-2 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-lg font-medium tracking-tight text-[var(--tyra-fg)] outline-none placeholder:text-[var(--tyra-subtle)]"
+                />
+                <div className="mt-2 grid gap-2">
+                  <Button
+                    disabled={isPending}
+                    tone="secondary"
+                    size="lg"
+                    className="w-full"
+                    onClick={() => {
+                      setErr(null);
+                      setOk(null);
+                      const kpa = parseKpa(pressureDraft[r.position]);
+                      if (Number.isNaN(kpa)) {
+                        setErr("Ogiltigt tryck.");
+                        return;
+                      }
+                      if (kpa != null && (kpa < 0 || kpa > 600)) {
+                        setErr("Ogiltigt tryck.");
+                        return;
+                      }
+                      startTransition(async () => {
+                        try {
+                          await setInflationAction({
+                            inspectionId: props.inspectionId,
+                            position: r.position,
+                            inflationState: "OK",
+                            tyrePressureKpa: kpa
+                          });
+                          setOk(`${posLabel(r.position)} luft: OK`);
+                          router.refresh();
+                        } catch (e) {
+                          setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                        }
+                      });
+                    }}
+                  >
+                    Luft OK
+                  </Button>
+                  <Button
+                    disabled={isPending}
+                    tone="secondary"
+                    size="lg"
+                    className="w-full"
+                    onClick={() => {
+                      setErr(null);
+                      setOk(null);
+                      const kpa = parseKpa(pressureDraft[r.position]);
+                      if (Number.isNaN(kpa)) {
+                        setErr("Ogiltigt tryck.");
+                        return;
+                      }
+                      if (kpa != null && (kpa < 0 || kpa > 600)) {
+                        setErr("Ogiltigt tryck.");
+                        return;
+                      }
+                      startTransition(async () => {
+                        try {
+                          await setInflationAction({
+                            inspectionId: props.inspectionId,
+                            position: r.position,
+                            inflationState: "LOW",
+                            tyrePressureKpa: kpa
+                          });
+                          setOk(`${posLabel(r.position)} luft: lågt`);
+                          router.refresh();
+                        } catch (e) {
+                          setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                        }
+                      });
+                    }}
+                  >
+                    Lågt
+                  </Button>
+                  <Button
+                    disabled={isPending}
+                    tone="destructive"
+                    size="lg"
+                    className="w-full"
+                    onClick={() => {
+                      setErr(null);
+                      setOk(null);
+                      const kpa = parseKpa(pressureDraft[r.position]);
+                      if (Number.isNaN(kpa)) {
+                        setErr("Ogiltigt tryck.");
+                        return;
+                      }
+                      if (kpa != null && (kpa < 0 || kpa > 600)) {
+                        setErr("Ogiltigt tryck.");
+                        return;
+                      }
+                      startTransition(async () => {
+                        try {
+                          await setInflationAction({
+                            inspectionId: props.inspectionId,
+                            position: r.position,
+                            inflationState: "FLAT",
+                            tyrePressureKpa: kpa ?? 0
+                          });
+                          setOk(`${posLabel(r.position)} luft: platt`);
+                          router.refresh();
+                        } catch (e) {
+                          setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                        }
+                      });
+                    }}
+                  >
+                    Platt
                   </Button>
                 </div>
               </div>

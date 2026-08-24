@@ -21,6 +21,8 @@ export type TirePositionInput = {
   rimSeverity?: string | null; // OK|COSMETIC|SAFETY
   rimDamageTypes?: string[] | null;
   rimNotes?: string | null;
+  tyrePressureKpa?: number | null;
+  inflationState?: string | null; // OK|LOW|FLAT|UNKNOWN
   wearPattern: string | null;
   damageTypes: string[] | null;
   notes: string | null;
@@ -189,6 +191,21 @@ export function computeTireWarnings(input: {
       w.push({ tone: "blocked", code: "RIM_SAFETY", title: "Trafikfarlig fälgskada" });
     } else if (rimIsCosmetic) {
       w.push({ tone: "attention", code: "RIM_COSMETIC", title: "Kosmetisk fälgskada" });
+    }
+
+    // Inflation / flat after storage
+    const infl = p.inflationState ? normToken(p.inflationState) : null;
+    if (infl === "FLAT") {
+      w.push({ tone: "blocked", code: "INFLATION_FLAT", title: "Däcket är platt" });
+    } else if (infl === "LOW") {
+      w.push({ tone: "attention", code: "INFLATION_LOW", title: "Lågt lufttryck" });
+    }
+    if (p.tyrePressureKpa != null) {
+      const kpa = clampInt(p.tyrePressureKpa, 0, 600);
+      if (kpa != null) {
+        if (kpa > 0 && kpa < 120) w.push({ tone: "blocked", code: "PRESSURE_VERY_LOW", title: "Mycket lågt lufttryck", detail: `${kpa} kPa` });
+        else if (kpa >= 120 && kpa < 180) w.push({ tone: "attention", code: "PRESSURE_LOW", title: "Lågt lufttryck", detail: `${kpa} kPa` });
+      }
     }
 
     // Damage / cracks / studs

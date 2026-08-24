@@ -24,6 +24,9 @@ export type InspectionPositionRow = {
   rim_severity?: string | null;
   rim_damage_types?: string[] | null;
   rim_notes?: string | null;
+  tyre_pressure_kpa?: number | null;
+  inflation_state?: string | null;
+  inflation_notes?: string | null;
 };
 
 export async function getInspection(input: { organizationId: string; inspectionId: string }) {
@@ -49,7 +52,8 @@ export async function getInspection(input: { organizationId: string; inspectionI
               ai_tread_depth_mm, ai_confidence, ai_model_version,
               wear_pattern, damage_types, tyre_brand, tyre_model, tyre_dimension, dot_week, dot_year, notes,
               valve_age_years, valve_condition, valve_notes,
-              rim_severity, rim_damage_types, rim_notes
+              rim_severity, rim_damage_types, rim_notes,
+              tyre_pressure_kpa, inflation_state, inflation_notes
        from tire_inspection_positions
        where organization_id = $1 and inspection_id = $2
        order by position asc`,
@@ -226,6 +230,50 @@ export async function setRimSeverity(input: {
            verified_at = now()
        where organization_id = $3 and inspection_id = $4 and position = $5`,
       [input.rimSeverity, input.actorUserId, input.organizationId, input.inspectionId, input.position]
+    );
+
+    const remaining = await client.query<{ c: string }>(
+      `select count(*)::text as c
+       from tire_inspection_positions
+       where organization_id = $1 and inspection_id = $2 and verified != true`,
+      [input.organizationId, input.inspectionId]
+    );
+    if (Number(remaining.rows[0]?.c ?? "0") === 0) {
+      await client.query(
+        `update tire_inspections
+         set inspection_status = 'VERIFIED', verified_at = now(), verified_by_user_id = $1
+         where organization_id = $2 and id = $3`,
+        [input.actorUserId, input.organizationId, input.inspectionId]
+      );
+    }
+  });
+}
+
+export async function setInflationState(input: {
+  organizationId: string;
+  inspectionId: string;
+  position: string;
+  inflationState: "OK" | "LOW" | "FLAT" | "UNKNOWN";
+  tyrePressureKpa?: number | null;
+  actorUserId: string;
+}) {
+  return withTransaction(async (client) => {
+    await client.query(
+      `update tire_inspection_positions
+       set inflation_state = $1,
+           tyre_pressure_kpa = $2,
+           verified = true,
+           verified_by_user_id = $3,
+           verified_at = now()
+       where organization_id = $4 and inspection_id = $5 and position = $6`,
+      [
+        input.inflationState,
+        input.tyrePressureKpa ?? null,
+        input.actorUserId,
+        input.organizationId,
+        input.inspectionId,
+        input.position
+      ]
     );
 
     const remaining = await client.query<{ c: string }>(
