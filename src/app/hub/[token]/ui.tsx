@@ -2,6 +2,10 @@
 
 import { useState, useTransition } from "react";
 
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { StatusBanner } from "@/components/ui/Status";
+
 import { placeOrderAction } from "./serverActions";
 
 export function HubClient(props: {
@@ -17,39 +21,48 @@ export function HubClient(props: {
 
   return (
     <div className="shrink-0 text-right">
-      {confirmed ? <div className="text-sm font-medium text-emerald-700">Beställning mottagen</div> : null}
+      {confirmed ? (
+        <div className="text-left">
+          <StatusBanner tone="good" title="Beställning mottagen">
+            Vi har tagit emot din beställning.
+          </StatusBanner>
+        </div>
+      ) : null}
 
       {!selected && !confirmed ? (
-        <button
+        <Button
+          tone="primary"
+          size="lg"
           disabled={isPending}
-          className="rounded-xl bg-[#0b0c0e] px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
           onClick={() => {
             setErr(null);
             setSelected(true);
           }}
         >
           Välj
-        </button>
+        </Button>
       ) : null}
 
       {selected && !confirmed ? (
-        <div className="mt-3 rounded-2xl border border-black/10 bg-white p-3 text-left">
-          <div className="text-xs font-medium text-black/60">Bekräfta din bil</div>
-          <div className="mt-1 text-xs text-black/60">
+        <Card className="mt-3 text-left" pad="sm">
+          <div className="text-xs font-medium text-[var(--tyra-muted)]">Bekräfta din bil</div>
+          <div className="mt-1 text-xs text-[var(--tyra-muted)]">
             Ange registreringsnumret för bilen som beställningen gäller.
           </div>
           <input
             value={reg}
             onChange={(e) => setReg(e.target.value.toUpperCase())}
-            className="mt-2 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none"
+            className="mt-2 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-base font-medium tracking-tight outline-none placeholder:text-[var(--tyra-subtle)]"
             placeholder="ABC123"
             autoCapitalize="characters"
             autoCorrect="off"
             spellCheck={false}
           />
-          <button
+          <Button
+            tone="primary"
+            size="lg"
+            className="mt-3 w-full"
             disabled={isPending || reg.trim().length < 3}
-            className="mt-3 w-full rounded-xl bg-[#0b0c0e] px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
             onClick={() => {
               setErr(null);
               startTransition(async () => {
@@ -68,15 +81,21 @@ export function HubClient(props: {
             }}
           >
             {isPending ? "Kontrollerar…" : "Beställ (betalning hos verkstaden)"}
-          </button>
+          </Button>
 
-          <div className="mt-2 text-xs text-black/50">
+          <div className="mt-2 text-xs text-[var(--tyra-subtle)]">
             Priset snapshotas vid beställning. Betalning sker hos verkstaden.
           </div>
-        </div>
+        </Card>
       ) : null}
 
-      {err ? <div className="mt-2 text-xs text-red-700">{err}</div> : null}
+      {err ? (
+        <div className="mt-2 text-left">
+          <StatusBanner tone="blocked" title="Kunde inte beställa">
+            {err}
+          </StatusBanner>
+        </div>
+      ) : null}
     </div>
   );
 }

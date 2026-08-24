@@ -3,6 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { StatusBanner, StatusBadge } from "@/components/ui/Status";
+
 import { confirmAllAction, setTreadDepthAction } from "./serverActions";
 
 type Row = {
@@ -28,24 +32,34 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
 
   return (
     <div className="mt-8">
       {err ? (
-        <div className="mb-4 rounded-xl border border-red-200/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <StatusBanner tone="blocked" title="Kunde inte spara" className="mb-4">
           {err}
-        </div>
+        </StatusBanner>
       ) : null}
 
-      <button
+      {ok ? (
+        <StatusBanner tone="good" title="Sparat" className="mb-4">
+          {ok}
+        </StatusBanner>
+      ) : null}
+
+      <Button
+        tone="primary"
+        size="xl"
         disabled={isPending}
-        className="rounded-xl bg-white px-4 py-2 text-sm font-medium text-[#0b0c0e] disabled:opacity-40"
         onClick={() => {
           setErr(null);
+          setOk(null);
           startTransition(async () => {
             try {
               await confirmAllAction({ inspectionId: props.inspectionId });
+              setOk("Alla positioner är verifierade.");
               router.refresh();
             } catch (e) {
               setErr(e instanceof Error ? e.message : "Kunde inte godkänna.");
@@ -54,56 +68,65 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
         }}
       >
         {isPending ? "Sparar…" : "Allt stämmer — godkänn alla"}
-      </button>
+      </Button>
 
       <div className="mt-6 space-y-2">
         {props.rows.map((r) => (
-          <div key={r.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+          <Card key={r.id} pad="lg">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-sm font-medium text-white/90">{posLabel(r.position)}</div>
-                <div className="mt-2 text-sm text-white/80">
-                  Gällande:{" "}
+                <div className="flex items-center gap-3">
+                  <div className="text-lg font-semibold tracking-tight">{posLabel(r.position)}</div>
+                  <StatusBadge
+                    tone={r.verified ? "good" : "attention"}
+                    label={r.verified ? "Verifierad" : "Behöver verifieras"}
+                  />
+                </div>
+
+                <div className="mt-3 text-base text-[var(--tyra-muted)]">
+                  Gällande{" "}
                   {r.verified && r.tread_depth_mm != null ? (
                     <span className="font-medium">{r.tread_depth_mm.toFixed(1)} mm</span>
                   ) : (
-                    <span className="text-white/60">Ej verifierat</span>
+                    <span className="text-[var(--tyra-subtle)]">Ej verifierat</span>
                   )}
-                  <span className="ml-2 text-xs text-white/50">{r.tread_depth_source ?? ""}</span>
+                  <span className="ml-2 text-sm text-[var(--tyra-subtle)]">{r.tread_depth_source ?? ""}</span>
                 </div>
 
-                <div className="mt-2 text-sm text-white/70">
-                  AI-förslag:{" "}
+                <div className="mt-2 text-base text-[var(--tyra-muted)]">
+                  AI-förslag{" "}
                   {r.ai_tread_depth_mm != null ? (
                     <>
                       <span className="font-medium">{r.ai_tread_depth_mm.toFixed(1)} mm</span>
                       {r.ai_confidence != null ? (
-                        <span className="ml-2 text-xs text-white/50">
+                        <span className="ml-2 text-sm text-[var(--tyra-subtle)]">
                           conf {Math.round(r.ai_confidence * 100)}%
                         </span>
                       ) : null}
                       {r.ai_model_version ? (
-                        <span className="ml-2 text-xs text-white/50">{r.ai_model_version}</span>
+                        <span className="ml-2 text-sm text-[var(--tyra-subtle)]">{r.ai_model_version}</span>
                       ) : null}
                     </>
                   ) : (
-                    <span className="text-white/60">—</span>
+                    <span className="text-[var(--tyra-subtle)]">—</span>
                   )}
                 </div>
               </div>
 
-              <div className="w-40">
-                <div className="text-xs font-medium text-white/60">Mätning</div>
+              <div className="w-44">
+                <div className="text-xs font-medium text-[var(--tyra-muted)]">Mätning</div>
                 <input
                   value={draft[r.position] ?? ""}
                   onChange={(e) => setDraft((d) => ({ ...d, [r.position]: e.target.value }))}
                   placeholder="t.ex 6.0"
                   inputMode="decimal"
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-[#0b0c0e] px-3 py-2 text-sm text-white/90 outline-none placeholder:text-white/40"
+                  className="mt-2 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-lg font-medium tracking-tight text-[var(--tyra-fg)] outline-none placeholder:text-[var(--tyra-subtle)]"
                 />
-                <button
+                <Button
                   disabled={isPending}
-                  className="mt-2 w-full rounded-xl border border-white/10 bg-transparent px-3 py-2 text-sm font-medium text-white/90 disabled:opacity-40"
+                  tone="secondary"
+                  size="lg"
+                  className="mt-2 w-full"
                   onClick={() => {
                     const v = Number(String(draft[r.position] ?? "").replace(",", "."));
                     if (!Number.isFinite(v)) {
@@ -111,6 +134,7 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                       return;
                     }
                     setErr(null);
+                    setOk(null);
                     startTransition(async () => {
                       try {
                         await setTreadDepthAction({
@@ -118,6 +142,7 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                           position: r.position,
                           treadDepthMm: v
                         });
+                        setOk(`${posLabel(r.position)} sparat: ${v.toFixed(1)} mm`);
                         router.refresh();
                       } catch (e) {
                         setErr(e instanceof Error ? e.message : "Kunde inte spara.");
@@ -126,10 +151,10 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                   }}
                 >
                   Spara
-                </button>
+                </Button>
               </div>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
     </div>

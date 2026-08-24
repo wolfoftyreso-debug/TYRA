@@ -1,6 +1,7 @@
 import { formatSekFromOre } from "@/lib/domain/pricing";
 import { getHubViewByToken } from "@/lib/server/hub";
 
+import { Card } from "@/components/ui/Card";
 import { HubClient } from "./ui";
 import { RelationshipClient } from "./relationship";
 
@@ -27,9 +28,9 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
     return (
       <main className="min-h-screen bg-white text-[#0b0c0e]">
         <div className="mx-auto w-full max-w-3xl px-6 py-10">
-          <div className="rounded-2xl border border-black/10 bg-white p-6">
-            <div className="text-sm text-black/70">Länken är ogiltig eller har återkallats.</div>
-          </div>
+          <Card pad="lg">
+            <div className="text-sm text-[var(--tyra-muted)]">Länken är ogiltig eller har återkallats.</div>
+          </Card>
         </div>
       </main>
     );
@@ -45,9 +46,9 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
         </h1>
         <div className="mt-2 text-sm text-black/60">{view.customerName}</div>
 
-        <div className="mt-8 rounded-3xl border border-black/10 bg-white p-6">
-          <div className="text-xs font-medium text-black/60">Status</div>
-          <div className="mt-2 text-sm text-black/80">
+        <Card className="mt-8" pad="lg">
+          <div className="text-xs font-medium text-[var(--tyra-muted)]">Status</div>
+          <div className="mt-2 text-sm text-[var(--tyra-muted)]">
             {view.commercialState === "NO_NEED"
               ? "Allt ser bra ut just nu."
               : view.commercialState === "LIVE_OPTIONS_AVAILABLE"
@@ -57,28 +58,28 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
                   : "Din status uppdateras här över tid."}
           </div>
           {view.nextBooking ? (
-            <div className="mt-3 rounded-2xl border border-black/10 bg-white p-4 text-sm">
+            <Card className="mt-3" pad="sm">
               <div className="font-medium">Din nästa tid</div>
-              <div className="mt-1 text-black/70">
+              <div className="mt-1 text-[var(--tyra-muted)]">
                 {new Date(view.nextBooking.start_at).toLocaleString("sv-SE")} –{" "}
                 {new Date(view.nextBooking.end_at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
               </div>
-            </div>
+            </Card>
           ) : null}
-        </div>
+        </Card>
 
         {view.lastOrder ? (
-          <div className="mt-8 rounded-3xl border border-black/10 bg-white p-6">
-            <div className="text-xs font-medium text-black/60">Beställning</div>
-            <div className="mt-2 text-sm text-black/80">
+          <Card className="mt-8" pad="lg">
+            <div className="text-xs font-medium text-[var(--tyra-muted)]">Beställning</div>
+            <div className="mt-2 text-sm text-[var(--tyra-muted)]">
               Vi har tagit emot din beställning. Betalning sker hos verkstaden.
             </div>
-            <div className="mt-3 rounded-2xl border border-black/10 bg-white p-4 text-sm">
+            <Card className="mt-3" pad="sm">
               <div className="font-medium">
                 {view.lastOrder.order_snapshot?.product?.brand ?? ""}{" "}
                 {view.lastOrder.order_snapshot?.product?.model ?? ""}
               </div>
-              <div className="mt-1 text-black/60">
+              <div className="mt-1 text-[var(--tyra-muted)]">
                 {view.lastOrder.order_snapshot?.product?.dimension ?? ""} •{" "}
                 {view.lastOrder.order_snapshot?.quantity ?? ""} st
               </div>
@@ -90,22 +91,22 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
                     : "—"}
                 </span>
               </div>
-              <div className="mt-1 text-xs text-black/50">
+              <div className="mt-1 text-xs text-[var(--tyra-subtle)]">
                 Mottagen {new Date(view.lastOrder.ordered_at).toLocaleString("sv-SE")}
               </div>
-            </div>
-          </div>
+            </Card>
+          </Card>
         ) : null}
 
-        <div className="mt-10 rounded-3xl border border-black/10 bg-white p-6">
-          <div className="text-xs font-medium text-black/60">Dina däck</div>
+        <Card className="mt-10" pad="lg">
+          <div className="text-xs font-medium text-[var(--tyra-muted)]">Dina däck</div>
 
           <div className="mt-6 grid grid-cols-2 gap-4">
             {view.positions.map((p) => (
-              <div key={p.position} className="rounded-2xl border border-black/10 bg-white p-4">
+              <Card key={p.position} pad="sm">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-medium">{posLabel(p.position)}</div>
-                  <div className="text-xs text-black/60">{p.health.label}</div>
+                  <div className="text-xs text-[var(--tyra-muted)]">{p.health.label}</div>
                 </div>
 
                 <div className="mt-3">
@@ -119,48 +120,48 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
                     {p.health.treadDepthMm != null ? (
                       <span className="font-medium">{p.health.treadDepthMm.toFixed(1)} mm</span>
                     ) : (
-                      <span className="text-black/50">Ingen mätning</span>
+                      <span className="text-[var(--tyra-subtle)]">Ingen mätning</span>
                     )}
                     {p.health.treadDepthSource ? (
-                      <span className="ml-2 text-xs text-black/50">{p.health.treadDepthSource}</span>
+                      <span className="ml-2 text-xs text-[var(--tyra-subtle)]">{p.health.treadDepthSource}</span>
                     ) : null}
                   </div>
                 </div>
-              </div>
+              </Card>
             ))}
           </div>
 
-          <div className="mt-6 text-xs text-black/50">
+          <div className="mt-6 text-xs text-[var(--tyra-subtle)]">
             Vi visar både mätvärde och bedömning. Rekommendation ≠ lagkrav.
           </div>
-        </div>
+        </Card>
 
         {view.storedWheelSets?.length ? (
-          <div className="mt-10 rounded-3xl border border-black/10 bg-white p-6">
-            <div className="text-xs font-medium text-black/60">På hotellet</div>
+          <Card className="mt-10" pad="lg">
+            <div className="text-xs font-medium text-[var(--tyra-muted)]">På hotellet</div>
             <div className="mt-4 space-y-2">
               {view.storedWheelSets.map((ws: any) => (
-                <div key={ws.wheel_set_id} className="rounded-2xl border border-black/10 bg-white p-4 text-sm">
+                <Card key={ws.wheel_set_id} pad="sm" className="text-sm">
                   <div className="flex items-center justify-between">
                     <div className="font-medium">
                       {ws.season === "winter" ? "Vinterhjul" : ws.season === "summer" ? "Sommarhjul" : ws.season}
                     </div>
-                    <div className="text-black/60">{ws.storage_code ?? "—"}</div>
+                    <div className="text-[var(--tyra-muted)]">{ws.storage_code ?? "—"}</div>
                   </div>
-                  <div className="mt-1 text-black/60">
+                  <div className="mt-1 text-[var(--tyra-muted)]">
                     Status: {ws.status} • Lager: {ws.storage_status}
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
-          </div>
+          </Card>
         ) : null}
 
-        <div className="mt-10 rounded-3xl border border-black/10 bg-white p-6">
+        <Card className="mt-10" pad="lg">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs font-medium text-black/60">Dagens alternativ</div>
-              <div className="mt-2 text-sm text-black/70">
+              <div className="text-xs font-medium text-[var(--tyra-muted)]">Dagens alternativ</div>
+              <div className="mt-2 text-sm text-[var(--tyra-muted)]">
                 Livepris monterat och klart (inkl. montering + miljöavgift).
               </div>
             </div>
@@ -169,23 +170,23 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
           {view.liveOptions?.options?.length ? (
             <div className="mt-6 space-y-3">
               {view.liveOptions.options.map((o: any) => (
-                <div key={o.liveOptionId} className="rounded-2xl border border-black/10 bg-white p-4">
+                <Card key={o.liveOptionId} pad="sm">
                   <div className="flex items-start justify-between gap-6">
                     <div>
                       <div className="text-sm font-semibold tracking-tight">
                         {o.brand} {o.model}
                       </div>
-                      <div className="mt-1 text-xs text-black/60">{o.dimension}</div>
+                      <div className="mt-1 text-xs text-[var(--tyra-muted)]">{o.dimension}</div>
                       <div className="mt-2 text-sm">
                         <span className="font-medium">
                           {formatSekFromOre(o.livePrice.totalCustomerPriceOre)}
                         </span>{" "}
-                        <span className="text-black/60">komplett</span>{" "}
-                        <span className="text-black/50">
+                        <span className="text-[var(--tyra-muted)]">komplett</span>{" "}
+                        <span className="text-[var(--tyra-subtle)]">
                           för {o.livePrice.quantity}
                         </span>
                       </div>
-                      <div className="mt-1 text-xs text-black/50">
+                      <div className="mt-1 text-xs text-[var(--tyra-subtle)]">
                         Pris uppdaterat{" "}
                         {new Date(o.livePrice.supplierPriceTimestamp).toLocaleString("sv-SE")}
                       </div>
@@ -196,15 +197,17 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
                       quantity={o.livePrice.quantity}
                     />
                   </div>
-                </div>
+                </Card>
               ))}
             </div>
           ) : (
-            <div className="mt-6 rounded-2xl border border-black/10 bg-white p-4 text-sm text-black/70">
+            <Card className="mt-6" pad="sm">
+              <div className="text-sm text-[var(--tyra-muted)]">
               Inga alternativ tillgängliga just nu (eller kontroll pågår).
-            </div>
+              </div>
+            </Card>
           )}
-        </div>
+        </Card>
 
         <RelationshipClient token={token} commercialState={view.commercialState} prefs={view.prefs} />
       </div>

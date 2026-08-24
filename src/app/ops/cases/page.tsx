@@ -1,16 +1,26 @@
 import { requireActiveOrg } from "@/lib/server/session";
 import { listCases } from "@/lib/server/cases";
+import Link from "next/link";
 
 import { DemoCaseButton } from "./ui";
+import { TaskRow } from "@/components/ui/Rows";
 
 export default async function CasesPage() {
   const { org } = await requireActiveOrg();
   const rows = await listCases({ organizationId: org.id });
 
+  function toneForStatus(status: string) {
+    if (status === "BLOCKED") return { tone: "blocked" as const, label: "Blocked" };
+    if (status === "IN_PROGRESS") return { tone: "attention" as const, label: "Pågår" };
+    if (status === "OPEN") return { tone: "neutral" as const, label: "Öppen" };
+    if (status === "DONE") return { tone: "good" as const, label: "Klar" };
+    return { tone: "neutral" as const, label: status };
+  }
+
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-10">
       <h1 className="text-2xl font-semibold tracking-tight">Ärenden</h1>
-      <p className="mt-2 text-sm text-white/60">{org.name}</p>
+      <p className="mt-2 text-base text-[var(--tyra-muted)]">{org.name}</p>
 
       <div className="mt-6">
         <DemoCaseButton />
@@ -19,25 +29,22 @@ export default async function CasesPage() {
       <div className="mt-8 space-y-2">
         {rows.length ? (
           rows.map((r) => (
-            <a
-              key={r.id}
-              href={`/ops/cases/${r.id}`}
-              className="block rounded-2xl border border-white/10 bg-white/5 p-4 hover:border-white/20"
-            >
-              <div className="flex items-center justify-between">
-                <div className="text-sm font-medium text-white/90">
-                  {r.registration_number ?? "—"}{" "}
-                  <span className="text-white/60">{r.customer_name ?? ""}</span>
-                </div>
-                <div className="text-xs text-white/60">{r.case_status}</div>
-              </div>
-              <div className="mt-1 text-sm text-white/70">{r.intent}</div>
-            </a>
+            <Link key={r.id} href={`/ops/cases/${r.id}`} className="block">
+              <TaskRow
+                headline={
+                  <span>
+                    {r.registration_number ?? "—"}{" "}
+                    <span className="text-[var(--tyra-muted)]">{r.customer_name ?? ""}</span>
+                  </span>
+                }
+                subtitle={r.intent}
+                status={toneForStatus(r.case_status)}
+                className="hover:border-[var(--tyra-focus)]"
+              />
+            </Link>
           ))
         ) : (
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
-            Inga ärenden ännu.
-          </div>
+          <TaskRow headline="Inga ärenden ännu." subtitle="Skapa ett demoärende för att testa flödet." status={null} />
         )}
       </div>
     </main>

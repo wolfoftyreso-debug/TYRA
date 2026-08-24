@@ -2,6 +2,9 @@ import { requireActiveOrg } from "@/lib/server/session";
 import { getCaseWorkCard, listCaseEvents } from "@/lib/server/cases";
 import Link from "next/link";
 import { WorkControls } from "./WorkControls";
+import { Card } from "@/components/ui/Card";
+import { StatusBadge } from "@/components/ui/Status";
+import { WorkCard } from "@/components/ui/WorkCard";
 
 export default async function CasePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -12,92 +15,96 @@ export default async function CasePage({ params }: { params: Promise<{ id: strin
   if (!card) {
     return (
       <main className="mx-auto w-full max-w-3xl px-6 py-10">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/70">
-          Hittade inget ärende.
-        </div>
+        <Card>Hittade inget ärende.</Card>
       </main>
     );
   }
 
+  const status =
+    card.steps.some((s) => s.status === "BLOCKED")
+      ? ({ tone: "blocked", label: "Blocked" } as const)
+      : card.steps.some((s) => s.status === "TODO")
+        ? ({ tone: "attention", label: "Pågår" } as const)
+        : ({ tone: "good", label: "Klar" } as const);
+
   return (
     <main className="mx-auto w-full max-w-3xl px-6 py-10">
-      <Link href="/ops/cases" className="text-sm text-white/60 underline">
+      <Link href="/ops/cases" className="text-sm text-[var(--tyra-muted)] underline">
         ← Ärenden
       </Link>
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight">{card.headline}</h1>
-      <p className="mt-2 text-sm text-white/60">{card.summary}</p>
 
-      <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="text-xs font-medium text-white/60">Nästa</div>
-        <div className="mt-2 text-sm text-white/90">
-          {card.nextBestAction?.title ?? "Klart."}
-        </div>
-      </div>
-
-      <WorkControls tireCaseId={id} steps={card.steps} />
+      <WorkCard
+        title={card.headline}
+        subtitle={card.summary}
+        status={status}
+        nextTitle={card.nextBestAction?.title ?? "Klart."}
+        nextHint={null}
+      >
+        <WorkControls tireCaseId={id} steps={card.steps} />
+      </WorkCard>
 
       {events.some((e) => e.event_type === "WHEEL_SET_REMOVED") ? (
-        <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-xs font-medium text-white/60">Efterflöde</div>
-          <div className="mt-2 text-sm text-white/80">
+        <Card className="mt-6">
+          <div className="text-xs font-medium text-[var(--tyra-muted)]">Efterflöde</div>
+          <div className="mt-2 text-base text-[var(--tyra-muted)]">
             Avtaget hjulset har en pågående inspektion och ska återlagras efter att moment är klara.
           </div>
-          <div className="mt-3 text-sm text-white/80">
+          <div className="mt-4 text-base">
             {(() => {
               const ev = events.find((e) => e.event_type === "WHEEL_SET_REMOVED");
               const inspId = ev?.data?.inspectionId;
-              return inspId ? (
-                <a className="underline" href={`/ops/inspections/${inspId}`}>
-                  Öppna inspektion
-                </a>
-              ) : null;
+              return inspId ? <Link className="underline" href={`/ops/inspections/${inspId}`}>Öppna inspektion</Link> : null;
             })()}
           </div>
-        </div>
+        </Card>
       ) : null}
 
       <div className="mt-8 space-y-2">
         {card.steps.map((s) => (
-          <div
-            key={s.kind}
-            className="rounded-2xl border border-white/10 bg-white/5 p-4"
-          >
+          <Card key={s.kind} pad="md">
             <div className="flex items-center justify-between">
-              <div className="text-sm font-medium text-white/90">{s.title}</div>
-              <div className="text-xs text-white/60">{s.status}</div>
+              <div className="text-base font-semibold tracking-tight">{s.title}</div>
+              <StatusBadge
+                tone={s.status === "DONE" ? "good" : s.status === "BLOCKED" ? "blocked" : s.status === "TODO" ? "attention" : "neutral"}
+                label={s.status === "DONE" ? "Klar" : s.status === "BLOCKED" ? "Blockerad" : s.status === "TODO" ? "Nästa" : s.status}
+              />
             </div>
-            <div className="mt-2 text-xs text-white/50">{s.kind}</div>
-          </div>
+          </Card>
         ))}
       </div>
 
-      <div className="mt-10 rounded-2xl border border-white/10 bg-white/5 p-4">
-        <div className="text-xs font-medium text-white/60">Händelser</div>
+      <Card className="mt-10" pad="lg">
+        <div className="text-xs font-medium text-[var(--tyra-muted)]">Händelser</div>
         <div className="mt-3 space-y-2">
           {events.length ? (
             events.map((e) => (
               <div
                 key={e.id}
-                className="rounded-xl border border-white/10 bg-[#0b0c0e] px-4 py-3"
+                className="rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-5 py-4"
               >
                 <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium text-white/90">{e.event_type}</div>
-                  <div className="text-xs text-white/60">{e.source}</div>
+                  <div className="text-base font-semibold tracking-tight">{e.event_type}</div>
+                  <div className="text-sm text-[var(--tyra-muted)]">{e.source}</div>
                 </div>
-                <div className="mt-1 text-xs text-white/50">{new Date(e.created_at).toLocaleString("sv-SE")}</div>
+                <div className="mt-1 text-sm text-[var(--tyra-subtle)]">{new Date(e.created_at).toLocaleString("sv-SE")}</div>
                 {e.previous_value || e.new_value ? (
-                  <div className="mt-2 text-xs text-white/60">
-                    {e.previous_value ? <div>Prev: {JSON.stringify(e.previous_value)}</div> : null}
-                    {e.new_value ? <div>New: {JSON.stringify(e.new_value)}</div> : null}
-                  </div>
+                  <details className="mt-3">
+                    <summary className="cursor-pointer text-sm text-[var(--tyra-muted)] underline">
+                      Visa detaljer
+                    </summary>
+                    <div className="mt-2 text-sm text-[var(--tyra-muted)]">
+                      {e.previous_value ? <div>Före: {JSON.stringify(e.previous_value)}</div> : null}
+                      {e.new_value ? <div>Efter: {JSON.stringify(e.new_value)}</div> : null}
+                    </div>
+                  </details>
                 ) : null}
               </div>
             ))
           ) : (
-            <div className="text-sm text-white/70">Inga events ännu.</div>
+            <div className="text-base text-[var(--tyra-muted)]">Inga händelser ännu.</div>
           )}
         </div>
-      </div>
+      </Card>
     </main>
   );
 }

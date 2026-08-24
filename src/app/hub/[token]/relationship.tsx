@@ -2,6 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { StatusBanner } from "@/components/ui/Status";
+
 import { createBookingAction, updatePrefsAction } from "./relationshipActions";
 
 export function RelationshipClient(props: {
@@ -49,21 +53,27 @@ export function RelationshipClient(props: {
 
   return (
     <div className="mt-10 grid gap-4">
-      <div className="rounded-3xl border border-black/10 bg-white p-6">
-        <div className="text-xs font-medium text-black/60">Mina påminnelser</div>
-        <div className="mt-2 text-sm text-black/70">
+      <Card pad="lg">
+        <div className="text-xs font-medium text-[var(--tyra-muted)]">Mina påminnelser</div>
+        <div className="mt-2 text-sm text-[var(--tyra-muted)]">
           Du styr vilken typ av uppdateringar du vill få. Vi skickar inte spam.
         </div>
 
-        {msg ? <div className="mt-3 text-sm text-black/70">{msg}</div> : null}
+        {msg ? (
+          <div className="mt-3">
+            <StatusBanner tone="good" title="Sparat">
+              {msg}
+            </StatusBanner>
+          </div>
+        ) : null}
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <div className="text-xs font-medium text-black/60">Nivå</div>
+            <div className="text-xs font-medium text-[var(--tyra-muted)]">Nivå</div>
             <select
               value={level}
               onChange={(e) => setLevel(e.target.value)}
-              className="mt-2 w-full rounded-xl border border-black/10 bg-white px-3 py-2 text-sm outline-none"
+              className="mt-2 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-sm outline-none"
             >
               <option value="fewer">Färre</option>
               <option value="normal">Normal</option>
@@ -71,7 +81,7 @@ export function RelationshipClient(props: {
             </select>
           </label>
 
-          <div className="text-xs text-black/50">
+          <div className="text-xs text-[var(--tyra-subtle)]">
             Inställningarna gäller denna TYRA-länk och kan ändras när som helst.
           </div>
         </div>
@@ -84,7 +94,10 @@ export function RelationshipClient(props: {
             ["remindBookings", "Påminn inför bokningar"],
             ["remindStorage", "Viktiga hotellhändelser"]
           ].map(([k, label]) => (
-            <label key={k} className="flex items-center gap-3 rounded-2xl border border-black/10 bg-white p-3">
+            <label
+              key={k}
+              className="flex items-center gap-3 rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] p-3"
+            >
               <input
                 type="checkbox"
                 checked={(flags as any)[k]}
@@ -95,8 +108,10 @@ export function RelationshipClient(props: {
           ))}
         </div>
 
-        <button
-          className="mt-4 rounded-xl bg-[#0b0c0e] px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+        <Button
+          tone="primary"
+          size="lg"
+          className="mt-4"
           disabled={isPending}
           onClick={() => {
             setMsg(null);
@@ -106,26 +121,28 @@ export function RelationshipClient(props: {
                 level: level as any,
                 ...flags
               });
-              setMsg("Sparat.");
+              setMsg("Dina inställningar är uppdaterade.");
             });
           }}
         >
           {isPending ? "Sparar…" : "Spara inställningar"}
-        </button>
-      </div>
+        </Button>
+      </Card>
 
-      <div className="rounded-3xl border border-black/10 bg-white p-6">
-        <div className="text-xs font-medium text-black/60">Boka tid</div>
-        <div className="mt-2 text-sm text-black/70">
+      <Card pad="lg">
+        <div className="text-xs font-medium text-[var(--tyra-muted)]">Boka tid</div>
+        <div className="mt-2 text-sm text-[var(--tyra-muted)]">
           Bokning sker i samma vy. (Kapacitetsmotor kommer senare — här är en första enkel slot-väljare.)
         </div>
 
         <div className="mt-5 grid gap-2">
           {slots.map((s) => (
-            <button
+            <Button
               key={s.startAtIso}
               disabled={isPending}
-              className="flex items-center justify-between rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm hover:border-black/20 disabled:opacity-40"
+              tone="secondary"
+              size="lg"
+              className="w-full justify-between"
               onClick={() => {
                 setMsg(null);
                 startTransition(async () => {
@@ -134,16 +151,16 @@ export function RelationshipClient(props: {
                     startAtIso: s.startAtIso,
                     endAtIso: s.endAtIso
                   });
-                  setMsg("Bokat.");
+                  setMsg("Din tid är bokad.");
                 });
               }}
             >
               <span>{s.label}</span>
-              <span className="text-black/50">45 min</span>
-            </button>
+              <span className="text-[var(--tyra-subtle)]">45 min</span>
+            </Button>
           ))}
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

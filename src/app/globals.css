@@ -2,6 +2,15 @@
 
 :root {
   color-scheme: light;
+  --tyra-bg: #ffffff;
+  --tyra-fg: #0b0c0e;
+  --tyra-muted: rgba(11, 12, 14, 0.62);
+  --tyra-subtle: rgba(11, 12, 14, 0.48);
+  --tyra-surface: rgba(11, 12, 14, 0.02);
+  --tyra-border: rgba(11, 12, 14, 0.10);
+  --tyra-panel: #ffffff;
+  --tyra-focus: rgba(11, 12, 14, 0.18);
+  --tyra-radius: 20px;
 }
 
 html,
@@ -11,12 +20,18 @@ body {
 
 body {
   margin: 0;
-  background: #ffffff;
-  color: #0b0c0e;
+  background: var(--tyra-bg);
+  color: var(--tyra-fg);
 }
 
 .ops {
-  background: #0b0c0e;
-  color: #f4f4f5;
+  --tyra-bg: #0b0c0e;
+  --tyra-fg: #f4f4f5;
+  --tyra-muted: rgba(244, 244, 245, 0.62);
+  --tyra-subtle: rgba(244, 244, 245, 0.46);
+  --tyra-surface: rgba(255, 255, 255, 0.05);
+  --tyra-border: rgba(255, 255, 255, 0.10);
+  --tyra-panel: #0b0c0e;
+  --tyra-focus: rgba(255, 255, 255, 0.18);
 }
 

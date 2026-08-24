@@ -1,6 +1,7 @@
 import { auth } from "@/lib/server/auth";
 import { getActiveOrgForUser } from "@/lib/server/orgs";
 
+import { Card } from "@/components/ui/Card";
 import { CommandBar } from "./CommandBar";
 
 export default async function OpsHome() {
@@ -13,23 +14,23 @@ export default async function OpsHome() {
       <h1 className="text-2xl font-semibold tracking-tight">
         God morgon{session?.user?.name ? `, ${session.user.name}` : ""}
       </h1>
-      <p className="mt-2 text-sm text-white/60">{org.name}</p>
+      <p className="mt-2 text-base text-[var(--tyra-muted)]">{org.name}</p>
 
       <CommandBar />
 
       <div className="mt-10 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-xs font-medium text-white/60">Idag</div>
-          <div className="mt-2 text-sm text-white/80">
+        <Card>
+          <div className="text-xs font-medium text-[var(--tyra-muted)]">Idag</div>
+          <div className="mt-2 text-base text-[var(--tyra-muted)]">
             0 hjulskiften • 0 plock • 0 uppmärksamhet • 0 offerter
           </div>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div className="text-xs font-medium text-white/60">Nästa</div>
-          <div className="mt-2 text-sm text-white/80">
+        </Card>
+        <Card>
+          <div className="text-xs font-medium text-[var(--tyra-muted)]">Nästa</div>
+          <div className="mt-2 text-base text-[var(--tyra-muted)]">
             Skapa första flödet: check-in → lagra → plock → verkstad.
           </div>
-        </div>
+        </Card>
       </div>
     </main>
   );
