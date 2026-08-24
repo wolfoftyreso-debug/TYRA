@@ -79,6 +79,21 @@ function worstTone(a: WarningTone, b: WarningTone): WarningTone {
   return "neutral";
 }
 
+function isFrontPosition(pos: string) {
+  const p = normToken(pos);
+  return p === "LF" || p === "RF";
+}
+
+function isRearPosition(pos: string) {
+  const p = normToken(pos);
+  return p === "LR" || p === "RR" || p === "LRO" || p === "LRI" || p === "RRO" || p === "RRI";
+}
+
+function fmtDepth(mm: number | null | undefined) {
+  if (mm == null || !Number.isFinite(mm)) return "—";
+  return `${mm.toFixed(1)} mm`;
+}
+
 export function computeTireWarnings(input: {
   positions: TirePositionInput[];
   mountedSeason?: string | null;
@@ -249,6 +264,42 @@ export function computeTireWarnings(input: {
       title: "Olika fabrikat på uppsättningen",
       detail: brands.join(" • ")
     });
+  }
+
+  // Standard mounting rule: best tyres (most tread) should be on rear axle
+  const withDepth = verifiedNoSpare.filter((p) => p.treadDepthMm != null && Number.isFinite(p.treadDepthMm));
+  const fronts = withDepth.filter((p) => isFrontPosition(p.position));
+  const rears = withDepth.filter((p) => isRearPosition(p.position));
+  if (fronts.length && rears.length) {
+    const sorted = withDepth.slice().sort((a, b) => (b.treadDepthMm ?? 0) - (a.treadDepthMm ?? 0));
+    const bestTwo = sorted.slice(0, 2);
+    const anyBestOnFront = bestTwo.some((p) => isFrontPosition(p.position));
+
+    const minRear = Math.min(...rears.map((p) => p.treadDepthMm ?? 0));
+    const maxFront = Math.max(...fronts.map((p) => p.treadDepthMm ?? 0));
+    const mismatch = maxFront >= minRear + 0.5;
+
+    if (anyBestOnFront && mismatch) {
+      const detail = `Fram bäst: ${fmtDepth(maxFront)} • Bak sämst: ${fmtDepth(minRear)}`;
+      setWarnings.push({
+        tone: "attention",
+        code: "BEST_TYRES_REAR",
+        title: "Bästa däcken ska sitta bak",
+        detail
+      });
+
+      for (const p of bestTwo) {
+        if (!isFrontPosition(p.position)) continue;
+        const list = positionWarnings[p.position] ?? [];
+        list.push({
+          tone: "attention",
+          code: "BEST_TYRES_REAR",
+          title: "Bästa däcken ska sitta bak",
+          detail: `Sitter fram (${fmtDepth(p.treadDepthMm)})`
+        });
+        positionWarnings[p.position] = list;
+      }
+    }
   }
 
   const lf = posIndex.get("LF") ?? null;

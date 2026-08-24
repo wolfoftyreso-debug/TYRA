@@ -136,5 +136,19 @@ describe("computeTireWarnings", () => {
     expect(res.positionWarnings["LF"].some((w) => w.code === "INFLATION_FLAT" && w.tone === "blocked")).toBe(true);
     expect(res.positionWarnings["LF"].some((w) => w.code === "PRESSURE_VERY_LOW" && w.tone === "blocked")).toBe(true);
   });
+
+  test("recommends best tyres on rear axle", () => {
+    const res = computeTireWarnings({
+      now: new Date("2026-06-01T00:00:00.000Z"),
+      positions: [
+        { position: "LF", verified: true, treadDepthMm: 7.0, tyreBrand: "A", tyreModel: null, tyreDimension: "205/55 R16", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null },
+        { position: "RF", verified: true, treadDepthMm: 6.8, tyreBrand: "A", tyreModel: null, tyreDimension: "205/55 R16", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null },
+        { position: "LR", verified: true, treadDepthMm: 4.0, tyreBrand: "A", tyreModel: null, tyreDimension: "205/55 R16", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null },
+        { position: "RR", verified: true, treadDepthMm: 3.9, tyreBrand: "A", tyreModel: null, tyreDimension: "205/55 R16", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null }
+      ]
+    });
+    expect(res.setWarnings.some((w) => w.code === "BEST_TYRES_REAR" && w.tone === "attention")).toBe(true);
+    expect(res.positionWarnings["LF"].some((w) => w.code === "BEST_TYRES_REAR")).toBe(true);
+  });
 });
 
