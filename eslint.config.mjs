@@ -5,6 +5,7 @@ export default [
   {
     ignores: [
       ".next/**",
+      ".vercel/**",
       "node_modules/**",
       "*.config.*",
       "eslint.config.*",

@@ -85,6 +85,7 @@ export type WorkflowStepKind =
   | "MEASURE_TREAD"
   | "PHOTO_WHEELS"
   | "STORE_WHEELS"
+  | "VERIFY_STORAGE_LOCATION"
   | "HANDOUT_WHEELS"
   | "CREATE_QUOTE"
   | "ORDER_TYRES"
@@ -224,6 +225,13 @@ export function resolveWorkflow(input: {
     steps.push({
       kind: "STORE_WHEELS",
       title: "Lagra",
+      status: "TODO",
+      required: true,
+      requires: {}
+    });
+    steps.push({
+      kind: "VERIFY_STORAGE_LOCATION",
+      title: "Verifiera lagerplats",
       status: "TODO",
       required: true,
       requires: {}

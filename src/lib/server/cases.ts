@@ -365,6 +365,16 @@ export async function setStepStatus(input: {
   source?: CaseEventSource;
 }) {
   return withTransaction(async (client) => {
+    const tc = await client.query<{ vehicle_id: string | null; customer_id: string | null }>(
+      `select vehicle_id, customer_id
+       from tire_cases
+       where organization_id = $1 and id = $2
+       limit 1`,
+      [input.organizationId, input.tireCaseId]
+    );
+    const vehicleId = tc.rows[0]?.vehicle_id ?? null;
+    const customerId = tc.rows[0]?.customer_id ?? null;
+
     const prevRes = await client.query<{ id: string; status: string }>(
       `select id, status
        from tire_case_steps
@@ -392,6 +402,115 @@ export async function setStepStatus(input: {
       newValue: { status: input.status }
     });
 
+    // Afterflow side-effects
+    if (input.status === "DONE" && input.stepKind === "WASH") {
+      await recordCaseEvent(client, {
+        organizationId: input.organizationId,
+        tireCaseId: input.tireCaseId,
+        eventType: "WHEEL_WASH_COMPLETED",
+        actorUserId: input.actorUserId,
+        source: input.source ?? "TECHNICIAN"
+      });
+    }
+
+    if (input.status === "DONE" && input.stepKind === "SWAP_ON_VEHICLE" && vehicleId) {
+      // Season transition: stored set -> mounted, mounted set -> removed/return flow
+      const stored = await client.query<{ id: string }>(
+        `select id
+         from wheel_sets
+         where organization_id = $1 and vehicle_id = $2 and storage_status = 'STORED'
+         order by updated_at desc
+         limit 1`,
+        [input.organizationId, vehicleId]
+      );
+      const mounted = await client.query<{ id: string }>(
+        `select id
+         from wheel_sets
+         where organization_id = $1 and vehicle_id = $2 and status = 'MOUNTED'
+         order by updated_at desc
+         limit 1`,
+        [input.organizationId, vehicleId]
+      );
+      const storedId = stored.rows[0]?.id ?? null;
+      const mountedId = mounted.rows[0]?.id ?? null;
+
+      if (storedId) {
+        await client.query(
+          `update wheel_sets
+           set status = 'MOUNTED', storage_status = 'ON_VEHICLE', updated_at = now()
+           where organization_id = $1 and id = $2`,
+          [input.organizationId, storedId]
+        );
+      }
+      if (mountedId) {
+        await client.query(
+          `update wheel_sets
+           set status = 'REMOVED', storage_status = 'RETURN_PENDING', updated_at = now()
+           where organization_id = $1 and id = $2`,
+          [input.organizationId, mountedId]
+        );
+
+        await client.query(
+          `insert into return_to_storage_tasks (organization_id, wheel_set_id, status)
+           values ($1,$2,'QUEUED')`,
+          [input.organizationId, mountedId]
+        );
+
+        // Create a PRELIMINARY inspection for removed set (AI can prefill later; technician verifies)
+        const insp = await client.query<{ id: string }>(
+          `insert into tire_inspections (
+             organization_id, customer_id, vehicle_id, wheel_set_id, tire_case_id,
+             inspection_status, captured_at, captured_by_user_id, source
+           )
+           values ($1,$2,$3,$4,$5,'PRELIMINARY',now(),$6,'PHYSICAL_INSPECTION')
+           returning id`,
+          [input.organizationId, customerId, vehicleId, mountedId, input.tireCaseId, input.actorUserId]
+        );
+        const inspId = insp.rows[0]!.id;
+
+        const positions: Array<"LF" | "RF" | "LR" | "RR"> = ["LF", "RF", "LR", "RR"];
+        for (const pos of positions) {
+          await client.query(
+            `insert into tire_inspection_positions (
+               organization_id, inspection_id, position,
+               verified, tread_depth_source,
+               ai_tread_depth_source, ai_model_version, ai_confidence, ai_suggested_at
+             )
+             values ($1,$2,$3,false,null,'AI_ESTIMATE','tire-vision-demo-v0.1',0.80,now())`,
+            [input.organizationId, inspId, pos]
+          );
+        }
+
+        await recordCaseEvent(client, {
+          organizationId: input.organizationId,
+          tireCaseId: input.tireCaseId,
+          eventType: "WHEEL_SET_REMOVED",
+          actorUserId: input.actorUserId,
+          source: input.source ?? "TECHNICIAN",
+          data: { removedWheelSetId: mountedId, inspectionId: inspId }
+        });
+      }
+
+      await recordCaseEvent(client, {
+        organizationId: input.organizationId,
+        tireCaseId: input.tireCaseId,
+        eventType: "SEASON_TRANSITION_COMPLETED",
+        actorUserId: input.actorUserId,
+        source: input.source ?? "TECHNICIAN",
+        data: { installedWheelSetId: storedId, removedWheelSetId: mountedId }
+      });
+    }
+
+    if (input.status === "DONE" && input.stepKind === "STORE_WHEELS" && vehicleId) {
+      await recordCaseEvent(client, {
+        organizationId: input.organizationId,
+        tireCaseId: input.tireCaseId,
+        eventType: "WHEEL_SET_STORED",
+        actorUserId: input.actorUserId,
+        source: input.source ?? "TECHNICIAN"
+      });
+    }
+
     // Auto-complete case when all required steps are DONE
     const remaining = await client.query<{ c: string }>(
       `select count(*)::text as c
@@ -406,7 +525,8 @@ export async function setStepStatus(input: {
       );
       await client.query(
         `update tire_cases
-         set case_status = 'DONE', work_status = 'DONE', updated_at = now()
+         set internal_complete = true, internal_complete_at = now(),
+             case_status = 'DONE', work_status = 'DONE', updated_at = now()
          where organization_id = $1 and id = $2`,
         [input.organizationId, input.tireCaseId]
       );
@@ -417,9 +537,47 @@ export async function setStepStatus(input: {
         actorUserId: input.actorUserId,
         source: input.source ?? "TECHNICIAN",
         previousValue: { case_status: prevCase.rows[0]?.case_status ?? null },
-        newValue: { case_status: "DONE" }
+        newValue: { case_status: "DONE", internal_complete: true }
       });
     }
+  });
+}
+
+export async function markCustomerReady(input: {
+  organizationId: string;
+  tireCaseId: string;
+  actorUserId: string;
+  ready: boolean;
+  source?: CaseEventSource;
+}) {
+  return withTransaction(async (client) => {
+    const prev = await client.query<{ customer_ready: boolean }>(
+      `select customer_ready
+       from tire_cases
+       where organization_id = $1 and id = $2
+       limit 1`,
+      [input.organizationId, input.tireCaseId]
+    );
+    if (!prev.rows[0]) throw new Error("Ärende saknas.");
+
+    await client.query(
+      `update tire_cases
+       set customer_ready = $1,
+           customer_ready_at = case when $1 = true then now() else null end,
+           updated_at = now()
+       where organization_id = $2 and id = $3`,
+      [input.ready, input.organizationId, input.tireCaseId]
+    );
+
+    await recordCaseEvent(client, {
+      organizationId: input.organizationId,
+      tireCaseId: input.tireCaseId,
+      eventType: input.ready ? "CUSTOMER_READY" : "CUSTOMER_READY_UNSET",
+      actorUserId: input.actorUserId,
+      source: input.source ?? "TECHNICIAN",
+      previousValue: { customer_ready: prev.rows[0].customer_ready },
+      newValue: { customer_ready: input.ready }
+    });
   });
 }
 

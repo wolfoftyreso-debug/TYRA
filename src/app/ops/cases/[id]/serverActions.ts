@@ -1,7 +1,7 @@
 "use server";
 
 import { requireActiveOrg } from "@/lib/server/session";
-import { blockCase, setStepStatus } from "@/lib/server/cases";
+import { blockCase, markCustomerReady, setStepStatus } from "@/lib/server/cases";
 
 export async function markStepDoneAction(input: { tireCaseId: string; stepKind: string }) {
   const { org, userId } = await requireActiveOrg();
@@ -28,6 +28,18 @@ export async function blockCaseAction(input: {
     actorUserId: userId,
     reason: input.reason,
     details: input.details ?? {},
+    source: "TECHNICIAN"
+  });
+  return { ok: true as const };
+}
+
+export async function setCustomerReadyAction(input: { tireCaseId: string; ready: boolean }) {
+  const { org, userId } = await requireActiveOrg();
+  await markCustomerReady({
+    organizationId: org.id,
+    tireCaseId: input.tireCaseId,
+    actorUserId: userId,
+    ready: input.ready,
     source: "TECHNICIAN"
   });
   return { ok: true as const };

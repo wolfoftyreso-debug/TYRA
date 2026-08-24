@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 
-import { blockCaseAction, markStepDoneAction } from "./serverActions";
+import { blockCaseAction, markStepDoneAction, setCustomerReadyAction } from "./serverActions";
 
 type Step = { kind: string; title: string; status: string };
 
@@ -43,6 +43,24 @@ export function WorkControls(props: { tireCaseId: string; steps: Step[] }) {
           }}
         >
           Markera klart
+        </button>
+
+        <button
+          disabled={isPending}
+          className="mt-2 w-full rounded-xl border border-white/10 bg-transparent px-4 py-2 text-sm font-medium text-white/90 disabled:opacity-40"
+          onClick={() => {
+            setErr(null);
+            startTransition(async () => {
+              try {
+                await setCustomerReadyAction({ tireCaseId: props.tireCaseId, ready: true });
+                router.refresh();
+              } catch (e) {
+                setErr(e instanceof Error ? e.message : "Kunde inte uppdatera.");
+              }
+            });
+          }}
+        >
+          Bilen kan lämnas ut (customer ready)
         </button>
       </div>
 

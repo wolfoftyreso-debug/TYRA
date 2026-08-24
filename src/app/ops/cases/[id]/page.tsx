@@ -36,6 +36,26 @@ export default async function CasePage({ params }: { params: Promise<{ id: strin
 
       <WorkControls tireCaseId={id} steps={card.steps} />
 
+      {events.some((e) => e.event_type === "WHEEL_SET_REMOVED") ? (
+        <div className="mt-8 rounded-2xl border border-white/10 bg-white/5 p-4">
+          <div className="text-xs font-medium text-white/60">Efterflöde</div>
+          <div className="mt-2 text-sm text-white/80">
+            Avtaget hjulset har en pågående inspektion och ska återlagras efter att moment är klara.
+          </div>
+          <div className="mt-3 text-sm text-white/80">
+            {(() => {
+              const ev = events.find((e) => e.event_type === "WHEEL_SET_REMOVED");
+              const inspId = ev?.data?.inspectionId;
+              return inspId ? (
+                <a className="underline" href={`/ops/inspections/${inspId}`}>
+                  Öppna inspektion
+                </a>
+              ) : null;
+            })()}
+          </div>
+        </div>
+      ) : null}
+
       <div className="mt-8 space-y-2">
         {card.steps.map((s) => (
           <div
