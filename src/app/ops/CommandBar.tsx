@@ -207,6 +207,15 @@ export function CommandBar() {
                     <FieldRow label="Status" value={last.data.status} />
                     <FieldRow label="Lager" value={last.data.storage_code ?? "—"} />
                   </div>
+                  <div className="mt-5">
+                    <Button
+                      tone="secondary"
+                      size="lg"
+                      onClick={() => router.push(`/ops/wheel-sets/${last.data.wheel_set_id}/hardware`)}
+                    >
+                      Hjuldetaljer (kåpor / hjullås / bultar)
+                    </Button>
+                  </div>
                 </>
               ) : (
                 <div className="text-base text-[var(--tyra-muted)]">Hittade ingen hjuluppsättning på den koden.</div>
