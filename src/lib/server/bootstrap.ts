@@ -109,18 +109,20 @@ export async function ensureBootstrap(input: { userId: string }) {
       customerId: string;
       vehicleId: string;
       season: "winter" | "summer";
+      wheelCount?: number;
       status: string;
       storageStatus: string;
     }) {
       const res = await client.query<{ id: string }>(
         `insert into wheel_sets (organization_id, customer_id, vehicle_id, season, wheel_count, status, storage_status)
-         values ($1, $2, $3, $4, 4, $5, $6)
+         values ($1, $2, $3, $4, $5, $6, $7)
          returning id`,
         [
           organizationId,
           input.customerId,
           input.vehicleId,
           input.season,
+          input.wheelCount ?? 4,
           input.status,
           input.storageStatus
         ]

@@ -24,6 +24,11 @@ function posLabel(p: string) {
   if (p === "RF") return "Höger fram";
   if (p === "LR") return "Vänster bak";
   if (p === "RR") return "Höger bak";
+  if (p === "SPARE") return "Reservhjul";
+  if (p === "LRO") return "Vänster bak (yttre)";
+  if (p === "LRI") return "Vänster bak (inre)";
+  if (p === "RRO") return "Höger bak (yttre)";
+  if (p === "RRI") return "Höger bak (inre)";
   return p;
 }
 
@@ -108,7 +113,7 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
         <Card className="mt-10" pad="lg">
           <div className="text-xs font-medium text-[var(--tyra-muted)]">Dina däck</div>
 
-          <div className="mt-6 grid grid-cols-2 gap-4">
+          <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3">
             {view.positions.map((p) => (
               <Card key={p.position} pad="sm">
                 <div className="flex items-center justify-between">

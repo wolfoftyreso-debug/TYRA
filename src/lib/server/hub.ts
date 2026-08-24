@@ -2,6 +2,7 @@ import { computeInstalledPrice, type PricingRule } from "@/lib/domain/pricing";
 import { computeTireHealth } from "@/lib/domain/tireHealth";
 import { computeTireWarnings } from "@/lib/domain/tireWarnings";
 import type { SupplierId } from "@/lib/suppliers/types";
+import type { TireWarning } from "@/lib/domain/tireWarnings";
 
 import { query, withTransaction } from "./db";
 import { generateOpaqueToken, sha256 } from "./tokens";
@@ -46,12 +47,12 @@ export async function getOrCreateCustomerHubLink(input: {
   });
 }
 
-export type HubWheelPosition = "LF" | "RF" | "LR" | "RR";
+export type HubWheelPosition = string;
 
 export type HubPositionView = {
   position: HubWheelPosition;
   health: ReturnType<typeof computeTireHealth>;
-  warnings: ReturnType<typeof computeTireWarnings>["positionWarnings"]["LF"];
+  warnings: TireWarning[];
   tyre: {
     brand: string | null;
     model: string | null;
@@ -78,6 +79,13 @@ export type CommercialState =
 
 function normalizeReg(input: string) {
   return input.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+function defaultPositionsForWheelCount(wheelCount: number | null) {
+  if (wheelCount === 4) return ["LF", "RF", "LR", "RR"];
+  if (wheelCount === 5) return ["LF", "RF", "LR", "RR", "SPARE"];
+  if (wheelCount === 6) return ["LF", "RF", "LRO", "LRI", "RRO", "RRI"];
+  return ["LF", "RF", "LR", "RR"];
 }
 
 export async function getHubViewByToken(input: { token: string }) {
@@ -142,8 +150,8 @@ export async function getHubViewByToken(input: { token: string }) {
   }
 
   // Current mounted wheel set (v1 heuristic)
-  const wsRes = await query<{ id: string; season: string }>(
-    `select id, season
+  const wsRes = await query<{ id: string; season: string; wheel_count: number }>(
+    `select id, season, wheel_count
      from wheel_sets
      where organization_id = $1 and vehicle_id = $2 and status = 'MOUNTED'
      order by updated_at desc
@@ -152,6 +160,7 @@ export async function getHubViewByToken(input: { token: string }) {
   );
   const wheelSetId = wsRes.rows[0]?.id ?? null;
   const mountedSeason = wsRes.rows[0]?.season ?? null;
+  const wheelCount = wsRes.rows[0]?.wheel_count ?? null;
 
   const posRows =
     wheelSetId
@@ -200,7 +209,7 @@ export async function getHubViewByToken(input: { token: string }) {
 
   const byPos = new Map<HubWheelPosition, HubPositionView>();
   const warningInputs: Array<{
-    position: "LF" | "RF" | "LR" | "RR";
+    position: string;
     verified: boolean;
     treadDepthMm: number | null;
     tyreBrand: string | null;
@@ -248,7 +257,7 @@ export async function getHubViewByToken(input: { token: string }) {
   const warnings = computeTireWarnings({
     positions: warningInputs.length
       ? warningInputs
-      : (["LF", "RF", "LR", "RR"] as const).map((p) => ({
+      : defaultPositionsForWheelCount(wheelCount).map((p) => ({
           position: p,
           verified: false,
           treadDepthMm: null,
@@ -264,19 +273,21 @@ export async function getHubViewByToken(input: { token: string }) {
     mountedSeason
   });
 
-  for (const p of ["LF", "RF", "LR", "RR"] as const) {
-    const v = byPos.get(p);
-    if (v) v.warnings = warnings.positionWarnings[p];
+  for (const [p, v] of byPos.entries()) {
+    v.warnings = warnings.positionWarnings[p] ?? [];
   }
 
-  const allPositions: HubWheelPosition[] = ["LF", "RF", "LR", "RR"];
-  const positions = allPositions.map((p) => {
+  const base = defaultPositionsForWheelCount(wheelCount);
+  const extra = [...new Set(posRows.rows.map((r) => r.position))].filter((p) => !base.includes(p));
+  const positionOrder: HubWheelPosition[] = [...base, ...extra];
+
+  const positions = positionOrder.map((p) => {
     const existing = byPos.get(p);
     return (
       existing ?? {
         position: p,
         health: computeTireHealth({ treadDepthMm: null }),
-        warnings: [],
+        warnings: warnings.positionWarnings[p] ?? [],
         tyre: { brand: null, model: null, dimension: null, dotYear: null }
       }
     );

@@ -8,7 +8,7 @@ export type TireWarning = {
 };
 
 export type TirePositionInput = {
-  position: "LF" | "RF" | "LR" | "RR";
+  position: string;
   verified: boolean;
   treadDepthMm: number | null;
   tyreBrand: string | null;
@@ -23,7 +23,7 @@ export type TirePositionInput = {
 
 export type TireWarningsResult = {
   setWarnings: TireWarning[];
-  positionWarnings: Record<"LF" | "RF" | "LR" | "RR", TireWarning[]>;
+  positionWarnings: Record<string, TireWarning[]>;
 };
 
 function normToken(s: string) {
@@ -71,15 +71,10 @@ export function computeTireWarnings(input: {
   now?: Date;
 }): TireWarningsResult {
   const now = input.now ?? new Date();
-  const posIndex: Record<"LF" | "RF" | "LR" | "RR", TirePositionInput | null> = {
-    LF: null,
-    RF: null,
-    LR: null,
-    RR: null
-  };
-  for (const p of input.positions) posIndex[p.position] = p;
+  const posIndex = new Map<string, TirePositionInput>();
+  for (const p of input.positions) posIndex.set(p.position, p);
 
-  const positionWarnings: TireWarningsResult["positionWarnings"] = { LF: [], RF: [], LR: [], RR: [] };
+  const positionWarnings: TireWarningsResult["positionWarnings"] = {};
 
   // Per-position: wear, age, damage
   for (const p of input.positions) {
@@ -149,10 +144,11 @@ export function computeTireWarnings(input: {
 
   // Set-level mismatches (only consider verified positions)
   const verified = input.positions.filter((p) => p.verified);
+  const verifiedNoSpare = verified.filter((p) => normToken(p.position) !== "SPARE");
   const setWarnings: TireWarning[] = [];
 
-  const brands = uniqTokens(verified.map((p) => p.tyreBrand));
-  const dims = uniqTokens(verified.map((p) => p.tyreDimension));
+  const brands = uniqTokens(verifiedNoSpare.map((p) => p.tyreBrand));
+  const dims = uniqTokens(verifiedNoSpare.map((p) => p.tyreDimension));
 
   if (dims.length > 1) {
     setWarnings.push({
@@ -172,8 +168,8 @@ export function computeTireWarnings(input: {
     });
   }
 
-  const lf = posIndex.LF;
-  const rf = posIndex.RF;
+  const lf = posIndex.get("LF") ?? null;
+  const rf = posIndex.get("RF") ?? null;
   if (lf?.verified && rf?.verified) {
     const b = uniqTokens([lf.tyreBrand, rf.tyreBrand]);
     const d = uniqTokens([lf.tyreDimension, rf.tyreDimension]);
@@ -183,8 +179,8 @@ export function computeTireWarnings(input: {
       setWarnings.push({ tone: "attention", code: "AXLE_BRAND_MISMATCH_FRONT", title: "Olika fabrikat fram" });
     }
   }
-  const lr = posIndex.LR;
-  const rr = posIndex.RR;
+  const lr = posIndex.get("LR") ?? null;
+  const rr = posIndex.get("RR") ?? null;
   if (lr?.verified && rr?.verified) {
     const b = uniqTokens([lr.tyreBrand, rr.tyreBrand]);
     const d = uniqTokens([lr.tyreDimension, rr.tyreDimension]);
@@ -195,10 +191,28 @@ export function computeTireWarnings(input: {
     }
   }
 
+  // Dually rear (6 wheels): left/right inner+outer
+  const lro = posIndex.get("LRO") ?? null;
+  const lri = posIndex.get("LRI") ?? null;
+  const rro = posIndex.get("RRO") ?? null;
+  const rri = posIndex.get("RRI") ?? null;
+  if (lro?.verified && lri?.verified) {
+    const b = uniqTokens([lro.tyreBrand, lri.tyreBrand]);
+    const d = uniqTokens([lro.tyreDimension, lri.tyreDimension]);
+    if (d.length > 1) setWarnings.push({ tone: "blocked", code: "AXLE_DIMENSION_MISMATCH_LEFT_DUAL", title: "Olika dimensioner vänster bak" });
+    else if (b.length > 1) setWarnings.push({ tone: "attention", code: "AXLE_BRAND_MISMATCH_LEFT_DUAL", title: "Olika fabrikat vänster bak" });
+  }
+  if (rro?.verified && rri?.verified) {
+    const b = uniqTokens([rro.tyreBrand, rri.tyreBrand]);
+    const d = uniqTokens([rro.tyreDimension, rri.tyreDimension]);
+    if (d.length > 1) setWarnings.push({ tone: "blocked", code: "AXLE_DIMENSION_MISMATCH_RIGHT_DUAL", title: "Olika dimensioner höger bak" });
+    else if (b.length > 1) setWarnings.push({ tone: "attention", code: "AXLE_BRAND_MISMATCH_RIGHT_DUAL", title: "Olika fabrikat höger bak" });
+  }
+
   // Aggregate: if any blocked per-position, add set-level summary
   let aggregate: WarningTone = "neutral";
-  for (const p of ["LF", "RF", "LR", "RR"] as const) {
-    for (const w of positionWarnings[p]) aggregate = worstTone(aggregate, w.tone);
+  for (const wList of Object.values(positionWarnings)) {
+    for (const w of wList) aggregate = worstTone(aggregate, w.tone);
   }
   if (aggregate === "blocked") {
     setWarnings.unshift({ tone: "blocked", code: "SET_ACTION_REQUIRED", title: "Åtgärd krävs" });

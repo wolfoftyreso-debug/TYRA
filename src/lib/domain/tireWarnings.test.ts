@@ -21,12 +21,10 @@ describe("computeTireWarnings", () => {
           damageTypes: [],
           notes: null
         },
-        { position: "RF", verified: false, treadDepthMm: null, tyreBrand: null, tyreModel: null, tyreDimension: null, dotWeek: null, dotYear: null, wearPattern: null, damageTypes: null, notes: null },
-        { position: "LR", verified: false, treadDepthMm: null, tyreBrand: null, tyreModel: null, tyreDimension: null, dotWeek: null, dotYear: null, wearPattern: null, damageTypes: null, notes: null },
-        { position: "RR", verified: false, treadDepthMm: null, tyreBrand: null, tyreModel: null, tyreDimension: null, dotWeek: null, dotYear: null, wearPattern: null, damageTypes: null, notes: null }
+        { position: "RF", verified: false, treadDepthMm: null, tyreBrand: null, tyreModel: null, tyreDimension: null, dotWeek: null, dotYear: null, wearPattern: null, damageTypes: null, notes: null }
       ]
     });
-    expect(res.positionWarnings.LF.some((w) => w.code === "TREAD_ILLEGAL")).toBe(true);
+    expect(res.positionWarnings["LF"].some((w) => w.code === "TREAD_ILLEGAL")).toBe(true);
     expect(res.setWarnings[0]?.tone).toBe("blocked");
   });
 
@@ -53,8 +51,8 @@ describe("computeTireWarnings", () => {
         { position: "RR", verified: true, treadDepthMm: 6, tyreBrand: "A", tyreModel: null, tyreDimension: "205/55 R16", dotWeek: null, dotYear: 2020, wearPattern: null, damageTypes: [], notes: null }
       ]
     });
-    expect(res.positionWarnings.LF.some((w) => w.code === "DOT_OLD")).toBe(true);
-    expect(res.positionWarnings.RF.some((w) => w.code === "DOT_AGING" || w.code === "DOT_OLD")).toBe(true);
+    expect(res.positionWarnings["LF"].some((w) => w.code === "DOT_OLD")).toBe(true);
+    expect(res.positionWarnings["RF"].some((w) => w.code === "DOT_AGING" || w.code === "DOT_OLD")).toBe(true);
   });
 });
 

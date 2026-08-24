@@ -87,7 +87,7 @@ export async function confirmAllPositions(input: {
 export async function setTechnicianTreadDepth(input: {
   organizationId: string;
   inspectionId: string;
-  position: "LF" | "RF" | "LR" | "RR";
+  position: string;
   treadDepthMm: number;
   actorUserId: string;
 }) {

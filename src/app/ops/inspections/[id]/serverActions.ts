@@ -11,7 +11,7 @@ export async function confirmAllAction(input: { inspectionId: string }) {
 
 export async function setTreadDepthAction(input: {
   inspectionId: string;
-  position: "LF" | "RF" | "LR" | "RR";
+  position: string;
   treadDepthMm: number;
 }) {
   const { org, userId } = await requireActiveOrg();

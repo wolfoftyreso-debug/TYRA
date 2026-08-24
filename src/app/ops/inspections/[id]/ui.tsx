@@ -12,7 +12,7 @@ import { confirmAllAction, setTreadDepthAction } from "./serverActions";
 
 type Row = {
   id: string;
-  position: "LF" | "RF" | "LR" | "RR";
+  position: string;
   tread_depth_mm: number | null;
   tread_depth_source: string | null;
   verified: boolean;
@@ -43,6 +43,11 @@ function posLabel(p: string) {
   if (p === "RF") return "Höger fram";
   if (p === "LR") return "Vänster bak";
   if (p === "RR") return "Höger bak";
+  if (p === "SPARE") return "Reservhjul";
+  if (p === "LRO") return "Vänster bak (yttre)";
+  if (p === "LRI") return "Vänster bak (inre)";
+  if (p === "RRO") return "Höger bak (yttre)";
+  if (p === "RRI") return "Höger bak (inre)";
   return p;
 }
 
