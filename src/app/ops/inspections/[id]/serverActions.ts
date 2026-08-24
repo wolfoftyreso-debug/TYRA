@@ -1,7 +1,14 @@
 "use server";
 
 import { requireActiveOrg } from "@/lib/server/session";
-import { confirmAllPositions, setTechnicianTreadDepth, setValveStemAge, setRimSeverity, setInflationState } from "@/lib/server/inspections";
+import {
+  confirmAllPositions,
+  setFillGas,
+  setInflationState,
+  setRimSeverity,
+  setTechnicianTreadDepth,
+  setValveStemAge
+} from "@/lib/server/inspections";
 
 export async function confirmAllAction(input: { inspectionId: string }) {
   const { org, userId } = await requireActiveOrg();
@@ -72,6 +79,22 @@ export async function setInflationAction(input: {
     position: input.position,
     inflationState: input.inflationState,
     tyrePressureKpa: input.tyrePressureKpa ?? null,
+    actorUserId: userId
+  });
+  return { ok: true as const };
+}
+
+export async function setFillGasAction(input: {
+  inspectionId: string;
+  position: string;
+  fillGas: "AIR" | "N2" | "UNKNOWN";
+}) {
+  const { org, userId } = await requireActiveOrg();
+  await setFillGas({
+    organizationId: org.id,
+    inspectionId: input.inspectionId,
+    position: input.position,
+    fillGas: input.fillGas,
     actorUserId: userId
   });
   return { ok: true as const };

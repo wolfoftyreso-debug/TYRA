@@ -55,6 +55,7 @@ export type HubPositionView = {
   warnings: TireWarning[];
   pressureKpa: number | null;
   inflationState: string | null;
+  fillGas: string | null;
   tyre: {
     brand: string | null;
     model: string | null;
@@ -185,6 +186,7 @@ export async function getHubViewByToken(input: { token: string }) {
           rim_severity: string | null;
           tyre_pressure_kpa: number | null;
           inflation_state: string | null;
+          fill_gas: string | null;
         }>(
           `with latest as (
              select id
@@ -211,6 +213,7 @@ export async function getHubViewByToken(input: { token: string }) {
                   tip.rim_severity
                   ,tip.tyre_pressure_kpa
                   ,tip.inflation_state
+                  ,tip.fill_gas
            from tire_inspection_positions tip
            join latest on latest.id = tip.inspection_id
            where tip.organization_id = $1
@@ -269,6 +272,7 @@ export async function getHubViewByToken(input: { token: string }) {
       warnings: [],
       pressureKpa: r.tyre_pressure_kpa ?? null,
       inflationState: r.inflation_state ?? null,
+      fillGas: r.fill_gas ?? null,
       tyre: {
         brand: r.verified === true ? r.tyre_brand : null,
         model: r.verified === true ? r.tyre_model : null,
@@ -314,6 +318,7 @@ export async function getHubViewByToken(input: { token: string }) {
         warnings: warnings.positionWarnings[p] ?? [],
         pressureKpa: null,
         inflationState: null,
+        fillGas: null,
         tyre: { brand: null, model: null, dimension: null, dotYear: null }
       }
     );

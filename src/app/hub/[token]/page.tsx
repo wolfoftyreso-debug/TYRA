@@ -159,6 +159,7 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
                       const parts: string[] = [];
                       parts.push(`Tryck: ${now != null ? `${Math.round(now)} kPa` : "—"}`);
                       if (target != null) parts.push(`Mål: ${target} kPa`);
+                      if (p.fillGas) parts.push(`Fyllning: ${p.fillGas === "N2" ? "Nitrogen" : p.fillGas === "AIR" ? "Luft" : p.fillGas}`);
                       return parts.join(" • ");
                     })()}
                   </div>

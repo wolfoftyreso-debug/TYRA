@@ -8,7 +8,14 @@ import { Card } from "@/components/ui/Card";
 import { StatusBanner, StatusBadge } from "@/components/ui/Status";
 import { computeTireWarnings } from "@/lib/domain/tireWarnings";
 
-import { confirmAllAction, setTreadDepthAction, setValveAgeAction, setRimSeverityAction, setInflationAction } from "./serverActions";
+import {
+  confirmAllAction,
+  setFillGasAction,
+  setInflationAction,
+  setRimSeverityAction,
+  setTreadDepthAction,
+  setValveAgeAction
+} from "./serverActions";
 
 type Row = {
   id: string;
@@ -32,6 +39,7 @@ type Row = {
   rim_severity?: string | null;
   tyre_pressure_kpa?: number | null;
   inflation_state?: string | null;
+  fill_gas?: string | null;
 };
 
 function warningToneLabel(warnings: Array<{ tone: string; title: string; detail?: string | null }> | null | undefined) {
@@ -217,6 +225,9 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                   {r.tyre_pressure_kpa != null ? (
                     <span className="ml-2 text-[var(--tyra-subtle)]">{r.tyre_pressure_kpa} kPa</span>
                   ) : null}
+                  <span className="ml-2 text-[var(--tyra-subtle)]">
+                    • Fyllning: {r.fill_gas === "N2" ? "Nitrogen" : r.fill_gas === "AIR" ? "Luft" : "Okänd"}
+                  </span>
                 </div>
               </div>
 
@@ -384,6 +395,75 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                   className="mt-2 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-lg font-medium tracking-tight text-[var(--tyra-fg)] outline-none placeholder:text-[var(--tyra-subtle)]"
                 />
                 <div className="mt-2 grid gap-2">
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button
+                      disabled={isPending}
+                      tone="secondary"
+                      size="lg"
+                      className="w-full"
+                      onClick={() => {
+                        setErr(null);
+                        setOk(null);
+                        startTransition(async () => {
+                          try {
+                            await setFillGasAction({ inspectionId: props.inspectionId, position: r.position, fillGas: "AIR" });
+                            setOk(`${posLabel(r.position)} fyllning: Luft`);
+                            router.refresh();
+                          } catch (e) {
+                            setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                          }
+                        });
+                      }}
+                    >
+                      Luft
+                    </Button>
+                    <Button
+                      disabled={isPending}
+                      tone="secondary"
+                      size="lg"
+                      className="w-full"
+                      onClick={() => {
+                        setErr(null);
+                        setOk(null);
+                        startTransition(async () => {
+                          try {
+                            await setFillGasAction({ inspectionId: props.inspectionId, position: r.position, fillGas: "N2" });
+                            setOk(`${posLabel(r.position)} fyllning: Nitrogen`);
+                            router.refresh();
+                          } catch (e) {
+                            setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                          }
+                        });
+                      }}
+                    >
+                      Nitrogen
+                    </Button>
+                    <Button
+                      disabled={isPending}
+                      tone="secondary"
+                      size="lg"
+                      className="w-full"
+                      onClick={() => {
+                        setErr(null);
+                        setOk(null);
+                        startTransition(async () => {
+                          try {
+                            await setFillGasAction({
+                              inspectionId: props.inspectionId,
+                              position: r.position,
+                              fillGas: "UNKNOWN"
+                            });
+                            setOk(`${posLabel(r.position)} fyllning: Okänd`);
+                            router.refresh();
+                          } catch (e) {
+                            setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                          }
+                        });
+                      }}
+                    >
+                      Okänd
+                    </Button>
+                  </div>
                   <Button
                     disabled={isPending}
                     tone="secondary"
