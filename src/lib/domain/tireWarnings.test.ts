@@ -28,12 +28,26 @@ describe("computeTireWarnings", () => {
     expect(res.setWarnings[0]?.tone).toBe("blocked");
   });
 
-  test("flags mixed dimensions as blocked", () => {
+  test("allows staggered dimensions (different front vs rear)", () => {
     const res = computeTireWarnings({
       now: new Date("2026-06-01T00:00:00.000Z"),
       positions: [
         { position: "LF", verified: true, treadDepthMm: 5, tyreBrand: "A", tyreModel: null, tyreDimension: "205/55 R16", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null },
         { position: "RF", verified: true, treadDepthMm: 5, tyreBrand: "A", tyreModel: null, tyreDimension: "205/55 R16", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null },
+        { position: "LR", verified: true, treadDepthMm: 5, tyreBrand: "A", tyreModel: null, tyreDimension: "225/45 R17", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null },
+        { position: "RR", verified: true, treadDepthMm: 5, tyreBrand: "A", tyreModel: null, tyreDimension: "225/45 R17", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null }
+      ]
+    });
+    expect(res.setWarnings.some((w) => w.code === "MIXED_DIMENSIONS" && w.tone === "blocked")).toBe(false);
+    expect(res.setWarnings.some((w) => w.code === "STAGGERED_DIMENSIONS")).toBe(true);
+  });
+
+  test("flags mixed dimensions as blocked when >2 dimensions", () => {
+    const res = computeTireWarnings({
+      now: new Date("2026-06-01T00:00:00.000Z"),
+      positions: [
+        { position: "LF", verified: true, treadDepthMm: 5, tyreBrand: "A", tyreModel: null, tyreDimension: "205/55 R16", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null },
+        { position: "RF", verified: true, treadDepthMm: 5, tyreBrand: "A", tyreModel: null, tyreDimension: "195/65 R15", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null },
         { position: "LR", verified: true, treadDepthMm: 5, tyreBrand: "A", tyreModel: null, tyreDimension: "225/45 R17", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null },
         { position: "RR", verified: true, treadDepthMm: 5, tyreBrand: "A", tyreModel: null, tyreDimension: "225/45 R17", dotWeek: null, dotYear: 2024, wearPattern: null, damageTypes: [], notes: null }
       ]

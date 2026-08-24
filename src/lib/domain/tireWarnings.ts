@@ -249,12 +249,25 @@ export function computeTireWarnings(input: {
   const dims = uniqTokens(verifiedNoSpare.map((p) => p.tyreDimension));
 
   if (dims.length > 1) {
-    setWarnings.push({
-      tone: "blocked",
-      code: "MIXED_DIMENSIONS",
-      title: "Olika dimensioner på uppsättningen",
-      detail: dims.join(" • ")
-    });
+    const fDims = uniqTokens(verifiedNoSpare.filter((p) => isFrontPosition(p.position)).map((p) => p.tyreDimension));
+    const rDims = uniqTokens(verifiedNoSpare.filter((p) => isRearPosition(p.position)).map((p) => p.tyreDimension));
+    const staggeredOk = dims.length === 2 && fDims.length === 1 && rDims.length === 1 && fDims[0] !== rDims[0];
+
+    if (!staggeredOk) {
+      setWarnings.push({
+        tone: "blocked",
+        code: "MIXED_DIMENSIONS",
+        title: "Olika dimensioner på uppsättningen",
+        detail: dims.join(" • ")
+      });
+    } else {
+      setWarnings.push({
+        tone: "neutral",
+        code: "STAGGERED_DIMENSIONS",
+        title: "Olika dimensioner fram/bak",
+        detail: `Fram: ${fDims[0]} • Bak: ${rDims[0]}`
+      });
+    }
   }
 
   if (brands.length > 1) {
