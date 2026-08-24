@@ -8,6 +8,9 @@ export async function updateHardwareAction(input: {
   patch: {
     hasCenterBore?: boolean | null;
     centerBoreNotes?: string | null;
+    hasHubRings?: boolean | null;
+    hubRingDimensions?: string | null;
+    hubRingNotes?: string | null;
     centerCapType?: "NONE" | "PLASTIC_CAP" | "LUG_COVERS" | "UNKNOWN" | null;
     capNotes?: string | null;
     hasWheelLock?: boolean | null;

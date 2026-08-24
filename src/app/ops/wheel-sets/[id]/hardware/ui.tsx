@@ -12,6 +12,9 @@ import { updateHardwareAction } from "./serverActions";
 type Hardware = {
   hasCenterBore: boolean | null;
   centerBoreNotes: string | null;
+  hasHubRings: boolean | null;
+  hubRingDimensions: string | null;
+  hubRingNotes: string | null;
   centerCapType: "NONE" | "PLASTIC_CAP" | "LUG_COVERS" | "UNKNOWN" | null;
   capNotes: string | null;
   hasWheelLock: boolean | null;
@@ -107,6 +110,71 @@ export function HardwareClient(props: { wheelSetId: string; initial: Hardware })
         >
           Spara notering
         </Button>
+      </Card>
+
+      <Card pad="lg">
+        <div className="text-xs font-medium text-[var(--tyra-muted)]">Navringar</div>
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <Button
+            tone={state.hasHubRings === true ? "primary" : "secondary"}
+            size="lg"
+            disabled={!canSave}
+            onClick={() => save({ hasHubRings: true }, "Navringar: ja")}
+          >
+            Finns
+          </Button>
+          <Button
+            tone={state.hasHubRings === false ? "secondary" : "tertiary"}
+            size="lg"
+            disabled={!canSave}
+            onClick={() => save({ hasHubRings: false, hubRingDimensions: null, hubRingNotes: null }, "Navringar: nej")}
+          >
+            Inga
+          </Button>
+          <Button
+            tone={state.hasHubRings == null ? "secondary" : "tertiary"}
+            size="lg"
+            disabled={!canSave}
+            onClick={() => save({ hasHubRings: null }, "Navringar: okänt")}
+          >
+            Okänt
+          </Button>
+        </div>
+
+        {state.hasHubRings ? (
+          <>
+            <input
+              value={state.hubRingDimensions ?? ""}
+              onChange={(e) => setState((s) => ({ ...s, hubRingDimensions: e.target.value }))}
+              placeholder="Dimension (t.ex. 72.6→66.6)"
+              className="mt-3 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-base outline-none placeholder:text-[var(--tyra-subtle)]"
+            />
+            <Button
+              className="mt-2"
+              tone="secondary"
+              size="lg"
+              disabled={!canSave}
+              onClick={() => save({ hubRingDimensions: state.hubRingDimensions || null }, "Dimension sparad")}
+            >
+              Spara dimension
+            </Button>
+            <input
+              value={state.hubRingNotes ?? ""}
+              onChange={(e) => setState((s) => ({ ...s, hubRingNotes: e.target.value }))}
+              placeholder="Notering (t.ex. plast/aluminium, sitter i fälg)"
+              className="mt-3 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-base outline-none placeholder:text-[var(--tyra-subtle)]"
+            />
+            <Button
+              className="mt-2"
+              tone="secondary"
+              size="lg"
+              disabled={!canSave}
+              onClick={() => save({ hubRingNotes: state.hubRingNotes || null }, "Notering sparad")}
+            >
+              Spara notering
+            </Button>
+          </>
+        ) : null}
       </Card>
 
       <Card pad="lg">
