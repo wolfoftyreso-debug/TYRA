@@ -6,6 +6,7 @@ type ReminderTarget = {
   organizationId: string;
   customerId: string | null;
   customerName: string | null;
+  customerLifecycleStatus: string | null;
   customerPhone: string | null;
   customerEmail: string | null;
   customerAddressLine1: string | null;
@@ -91,6 +92,7 @@ async function listTargets(input: { organizationId: string }): Promise<ReminderT
     organization_id: string;
     customer_id: string | null;
     customer_name: string | null;
+    customer_lifecycle_status: string | null;
     customer_phone: string | null;
     customer_email: string | null;
     address_line1: string | null;
@@ -109,6 +111,7 @@ async function listTargets(input: { organizationId: string }): Promise<ReminderT
        v.organization_id as organization_id,
        v.customer_id as customer_id,
        c.name as customer_name,
+       c.lifecycle_status as customer_lifecycle_status,
        c.phone as customer_phone,
        c.email as customer_email,
        c.address_line1 as address_line1,
@@ -142,6 +145,7 @@ async function listTargets(input: { organizationId: string }): Promise<ReminderT
     organizationId: r.organization_id,
     customerId: r.customer_id,
     customerName: r.customer_name,
+    customerLifecycleStatus: r.customer_lifecycle_status,
     customerPhone: r.customer_phone,
     customerEmail: r.customer_email,
     customerAddressLine1: r.address_line1,
@@ -271,6 +275,9 @@ export async function runSeasonAndLawReminders(input: {
 
   for (const t of targets) {
     if ((t.vehicleLifecycleStatus ?? "ACTIVE") === "SOLD") {
+      continue;
+    }
+    if ((t.customerLifecycleStatus ?? "ACTIVE") === "DECEASED") {
       continue;
     }
     if (!t.remindSeason) {
@@ -489,6 +496,7 @@ export async function runSeasonAndLawReminders(input: {
     vehicle_id: string | null;
     customer_id: string | null;
     customer_name: string | null;
+    customer_lifecycle_status: string | null;
     customer_phone: string | null;
     customer_email: string | null;
     address_line1: string | null;
@@ -506,6 +514,7 @@ export async function runSeasonAndLawReminders(input: {
        ws.vehicle_id as vehicle_id,
        ws.customer_id as customer_id,
        c.name as customer_name,
+       c.lifecycle_status as customer_lifecycle_status,
        c.phone as customer_phone,
        c.email as customer_email,
        c.address_line1 as address_line1,
@@ -532,6 +541,7 @@ export async function runSeasonAndLawReminders(input: {
       organizationId: input.organizationId,
       customerId: r.customer_id,
       customerName: r.customer_name,
+      customerLifecycleStatus: r.customer_lifecycle_status,
       customerPhone: r.customer_phone,
       customerEmail: r.customer_email,
       customerAddressLine1: r.address_line1,
@@ -547,6 +557,7 @@ export async function runSeasonAndLawReminders(input: {
       remindSeason: r.remind_season !== false
     };
     if (t.vehicleLifecycleStatus === "SOLD") continue;
+    if ((t.customerLifecycleStatus ?? "ACTIVE") === "DECEASED") continue;
 
     const channel = chooseChannel(t);
     await withTransaction(async () => {

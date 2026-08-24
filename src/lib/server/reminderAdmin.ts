@@ -54,3 +54,52 @@ export async function markWheelSetForgottenByPublicCode(input: {
   return { ok: true as const };
 }
 
+export async function markCustomerDeceasedByRegistration(input: {
+  organizationId: string;
+  registrationNumber: string;
+}) {
+  const v = await query<{ id: string; customer_id: string | null }>(
+    `select id, customer_id
+     from vehicles
+     where organization_id = $1 and registration_number = $2
+     limit 1`,
+    [input.organizationId, input.registrationNumber.toUpperCase()]
+  );
+  const vehicleId = v.rows[0]?.id ?? null;
+  const customerId = v.rows[0]?.customer_id ?? null;
+  if (!vehicleId) throw new Error("Hittade inget fordon.");
+  if (!customerId) throw new Error("Fordonet saknar kund kopplad.");
+
+  await query(
+    `update customers
+     set lifecycle_status = 'DECEASED',
+         deceased_at = coalesce(deceased_at, now()),
+         updated_at = now()
+     where organization_id = $1 and id = $2`,
+    [input.organizationId, customerId]
+  );
+
+  // Mark all wheel sets for the vehicle as belonging to the estate
+  await query(
+    `update wheel_sets
+     set disposition_status = 'ESTATE',
+         disposition_notes = coalesce(disposition_notes, 'Tillhör dödsbo'),
+         updated_at = now()
+     where organization_id = $1 and vehicle_id = $2`,
+    [input.organizationId, vehicleId]
+  );
+
+  // Stop open reminder threads for this vehicle and linked wheel sets
+  await query(
+    `update reminder_threads
+     set status = 'STOPPED',
+         stopped_reason = 'CUSTOMER_DECEASED',
+         stopped_at = now(),
+         updated_at = now()
+     where organization_id = $1 and vehicle_id = $2 and status = 'OPEN'`,
+    [input.organizationId, vehicleId]
+  );
+
+  return { ok: true as const };
+}
+

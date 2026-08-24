@@ -4,6 +4,7 @@ export type Command =
   | { kind: "navigate"; to: "integrations" }
   | { kind: "mark_vehicle_sold"; registrationNumber: string }
   | { kind: "mark_wheels_forgotten"; wheelSetCode: string }
+  | { kind: "mark_customer_deceased"; registrationNumber: string }
   | { kind: "lookup_registration"; registrationNumber: string }
   | { kind: "lookup_storage_position"; code: string }
   | { kind: "lookup_wheel_set_code"; code: string }
@@ -65,6 +66,15 @@ export function parseCommand(rawInput: string): Command {
   if (lower.startsWith("glömt ") || lower.startsWith("glomt ") || lower.startsWith("forgot ")) {
     const ws = normalizeUpper(raw.replace(/^(glömt|glomt|forgot)\s+/i, ""));
     if (isWheelSetCode(ws)) return { kind: "mark_wheels_forgotten", wheelSetCode: ws };
+  }
+  if (
+    lower.startsWith("avliden ") ||
+    lower.startsWith("dödsfall ") ||
+    lower.startsWith("dodsfal ") ||
+    lower.startsWith("deceased ")
+  ) {
+    const reg = normalizeUpper(raw.replace(/^(avliden|dödsfall|dodsfal|deceased)\s+/i, ""));
+    if (isRegNo(reg)) return { kind: "mark_customer_deceased", registrationNumber: reg };
   }
 
   if (isRegNo(upper)) return { kind: "lookup_registration", registrationNumber: upper };

@@ -28,5 +28,12 @@ describe("parseCommand", () => {
     expect(parseCommand("plockkö")).toEqual({ kind: "navigate", to: "pick_queue" });
     expect(parseCommand("offerter")).toEqual({ kind: "navigate", to: "quotes_queue" });
   });
+
+  it("parses deceased command", () => {
+    expect(parseCommand("avliden abc123")).toEqual({
+      kind: "mark_customer_deceased",
+      registrationNumber: "ABC123"
+    });
+  });
 });
 

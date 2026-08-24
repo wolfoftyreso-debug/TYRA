@@ -7,7 +7,11 @@ import {
   lookupByStoragePosition,
   lookupByWheelSetCode
 } from "@/lib/server/search";
-import { markVehicleSoldByRegistration, markWheelSetForgottenByPublicCode } from "@/lib/server/reminderAdmin";
+import {
+  markCustomerDeceasedByRegistration,
+  markVehicleSoldByRegistration,
+  markWheelSetForgottenByPublicCode
+} from "@/lib/server/reminderAdmin";
 
 export type CommandResponse =
   | { kind: "navigate"; to: "pick_queue" | "quotes_queue" }
@@ -31,7 +35,7 @@ export async function runCommandAction(input: { text: string }): Promise<Command
     return {
       kind: "unknown",
       message:
-        "Jag förstod inte. Prova regnr (ABC123), hyllkod (A-04-B-12), WS-kod (WS-XXXX), 'ärenden', 'plockkö', 'offerter', 'leverantörer', 'sålt ABC123' eller 'glömt WS-XXXX'."
+        "Jag förstod inte. Prova regnr (ABC123), hyllkod (A-04-B-12), WS-kod (WS-XXXX), 'ärenden', 'plockkö', 'offerter', 'leverantörer', 'sålt ABC123', 'glömt WS-XXXX' eller 'avliden ABC123'."
     };
   }
 
@@ -53,6 +57,17 @@ export async function runCommandAction(input: { text: string }): Promise<Command
       wheelSetPublicCode: cmd.wheelSetCode
     });
     return { kind: "ok", message: `Markerat ${cmd.wheelSetCode} som glömt kvar. Eskalering kan triggas.` };
+  }
+
+  if (cmd.kind === "mark_customer_deceased") {
+    await markCustomerDeceasedByRegistration({
+      organizationId: org.id,
+      registrationNumber: cmd.registrationNumber
+    });
+    return {
+      kind: "ok",
+      message: `Markerat kund som avliden för ${cmd.registrationNumber}. Hjul flaggade som dödsbo och påminnelser stoppade.`
+    };
   }
 
   if (cmd.kind === "lookup_registration") {
