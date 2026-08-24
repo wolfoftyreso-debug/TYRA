@@ -16,6 +16,8 @@ export type TirePositionInput = {
   tyreDimension: string | null;
   dotWeek: number | null;
   dotYear: number | null;
+  valveAgeYears?: number | null;
+  valveCondition?: string | null;
   wearPattern: string | null;
   damageTypes: string[] | null;
   notes: string | null;
@@ -57,6 +59,13 @@ function hasDamage(damageTypes: string[] | null, notes: string | null, tokens: s
 function computeAgeYears(dotYear: number | null, now: Date) {
   if (!dotYear || dotYear < 1980 || dotYear > now.getUTCFullYear() + 1) return null;
   return now.getUTCFullYear() - dotYear;
+}
+
+function clampInt(x: number, min: number, max: number) {
+  if (!Number.isFinite(x)) return null;
+  const v = Math.trunc(x);
+  if (v < min || v > max) return null;
+  return v;
 }
 
 function worstTone(a: WarningTone, b: WarningTone): WarningTone {
@@ -105,24 +114,59 @@ export function computeTireWarnings(input: {
       }
     }
 
-    // Age
-    const age = computeAgeYears(p.dotYear, now);
-    if (age != null) {
-      if (age >= 10) {
+    // Age (tyre)
+    const tireAge = computeAgeYears(p.dotYear, now);
+    if (tireAge != null) {
+      if (tireAge >= 10) {
         w.push({
           tone: "blocked",
           code: "DOT_OLD",
           title: "Mycket gamla däck",
-          detail: `DOT ${p.dotYear} (≈${age} år)`
+          detail: `DOT ${p.dotYear} (≈${tireAge} år)`
         });
-      } else if (age >= 6) {
+      } else if (tireAge >= 6) {
         w.push({
           tone: "attention",
           code: "DOT_AGING",
           title: "Äldre däck",
-          detail: `DOT ${p.dotYear} (≈${age} år)`
+          detail: `DOT ${p.dotYear} (≈${tireAge} år)`
         });
       }
+    }
+
+    // Valve stems can be older than tyres
+    const valveAge = p.valveAgeYears != null ? clampInt(p.valveAgeYears, 0, 50) : null;
+    if (valveAge != null) {
+      if (valveAge >= 15) {
+        w.push({
+          tone: "blocked",
+          code: "VALVE_OLD",
+          title: "Mycket gamla ventilstockar",
+          detail: `≈${valveAge} år`
+        });
+      } else if (valveAge >= 10) {
+        w.push({
+          tone: "attention",
+          code: "VALVE_AGING",
+          title: "Gamla ventilstockar",
+          detail: `≈${valveAge} år`
+        });
+      }
+      if (tireAge != null && tireAge <= 3 && valveAge >= 10) {
+        w.push({
+          tone: "attention",
+          code: "VALVE_OLDER_THAN_TYRE",
+          title: "Ventilstockar mycket äldre än däck",
+          detail: `Däck ≈${tireAge} år • Ventil ≈${valveAge} år`
+        });
+      }
+    }
+
+    const valveCond = p.valveCondition ? normToken(p.valveCondition) : null;
+    if (valveCond === "LEAKING" || valveCond === "LÄCKER" || valveCond === "LEAK") {
+      w.push({ tone: "blocked", code: "VALVE_LEAK", title: "Ventil läcker" });
+    } else if (valveCond === "CRACKED" || valveCond === "SPRICK" || valveCond === "AGING") {
+      w.push({ tone: "attention", code: "VALVE_CONDITION", title: "Ventil behöver bytas" });
     }
 
     // Damage / cracks / studs

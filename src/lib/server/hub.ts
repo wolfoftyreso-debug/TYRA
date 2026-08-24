@@ -178,6 +178,8 @@ export async function getHubViewByToken(input: { token: string }) {
           wear_pattern: string | null;
           damage_types: string[] | null;
           notes: string | null;
+          valve_age_years: number | null;
+          valve_condition: string | null;
         }>(
           `with latest as (
              select id
@@ -198,7 +200,9 @@ export async function getHubViewByToken(input: { token: string }) {
                   tip.dot_year,
                   tip.wear_pattern,
                   tip.damage_types,
-                  tip.notes
+                  tip.notes,
+                  tip.valve_age_years,
+                  tip.valve_condition
            from tire_inspection_positions tip
            join latest on latest.id = tip.inspection_id
            where tip.organization_id = $1
@@ -217,6 +221,8 @@ export async function getHubViewByToken(input: { token: string }) {
     tyreDimension: string | null;
     dotWeek: number | null;
     dotYear: number | null;
+    valveAgeYears: number | null;
+    valveCondition: string | null;
     wearPattern: string | null;
     damageTypes: string[] | null;
     notes: string | null;
@@ -232,6 +238,8 @@ export async function getHubViewByToken(input: { token: string }) {
       tyreDimension: r.verified === true ? r.tyre_dimension : null,
       dotWeek: r.dot_week ?? null,
       dotYear: r.dot_year ?? null,
+      valveAgeYears: r.valve_age_years ?? null,
+      valveCondition: r.valve_condition ?? null,
       wearPattern: r.wear_pattern ?? null,
       damageTypes: (r.damage_types as any) ?? null,
       notes: r.notes ?? null

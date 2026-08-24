@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { StatusBanner, StatusBadge } from "@/components/ui/Status";
 import { computeTireWarnings } from "@/lib/domain/tireWarnings";
 
-import { confirmAllAction, setTreadDepthAction } from "./serverActions";
+import { confirmAllAction, setTreadDepthAction, setValveAgeAction } from "./serverActions";
 
 type Row = {
   id: string;
@@ -27,6 +27,8 @@ type Row = {
   dot_week?: number | null;
   dot_year?: number | null;
   notes?: string | null;
+  valve_age_years?: number | null;
+  valve_condition?: string | null;
 };
 
 function warningToneLabel(warnings: Array<{ tone: string; title: string; detail?: string | null }> | null | undefined) {
@@ -57,6 +59,7 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [valveDraft, setValveDraft] = useState<Record<string, string>>({});
 
   const warnings = useMemo(() => {
     return computeTireWarnings({
@@ -70,6 +73,8 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
         tyreDimension: r.verified ? (r.tyre_dimension ?? null) : null,
         dotWeek: r.dot_week ?? null,
         dotYear: r.dot_year ?? null,
+        valveAgeYears: r.valve_age_years ?? null,
+        valveCondition: r.valve_condition ?? null,
         wearPattern: r.wear_pattern ?? null,
         damageTypes: (r.damage_types as any) ?? null,
         notes: r.notes ?? null
@@ -157,6 +162,16 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                     <span className="text-[var(--tyra-subtle)]">—</span>
                   )}
                 </div>
+
+                <div className="mt-3 text-sm text-[var(--tyra-muted)]">
+                  Ventilstockar:{" "}
+                  {r.valve_age_years != null ? (
+                    <span className="font-medium">≈{r.valve_age_years} år</span>
+                  ) : (
+                    <span className="text-[var(--tyra-subtle)]">—</span>
+                  )}
+                  {r.valve_condition ? <span className="ml-2 text-[var(--tyra-subtle)]">{r.valve_condition}</span> : null}
+                </div>
               </div>
 
               <div className="w-44">
@@ -197,6 +212,46 @@ export function InspectionReviewClient(props: { inspectionId: string; rows: Row[
                   }}
                 >
                   Spara
+                </Button>
+
+                <div className="mt-4 text-xs font-medium text-[var(--tyra-muted)]">Ventil (år)</div>
+                <input
+                  value={valveDraft[r.position] ?? ""}
+                  onChange={(e) => setValveDraft((d) => ({ ...d, [r.position]: e.target.value }))}
+                  placeholder="t.ex 15"
+                  inputMode="numeric"
+                  className="mt-2 w-full rounded-[var(--tyra-radius)] border border-[var(--tyra-border)] bg-[var(--tyra-panel)] px-4 py-3 text-lg font-medium tracking-tight text-[var(--tyra-fg)] outline-none placeholder:text-[var(--tyra-subtle)]"
+                />
+                <Button
+                  disabled={isPending}
+                  tone="secondary"
+                  size="lg"
+                  className="mt-2 w-full"
+                  onClick={() => {
+                    const v = Number(String(valveDraft[r.position] ?? "").replace(",", "."));
+                    if (!Number.isFinite(v) || v < 0 || v > 50) {
+                      setErr("Ogiltig ventilålder.");
+                      return;
+                    }
+                    setErr(null);
+                    setOk(null);
+                    startTransition(async () => {
+                      try {
+                        await setValveAgeAction({
+                          inspectionId: props.inspectionId,
+                          position: r.position,
+                          valveAgeYears: Math.trunc(v),
+                          valveCondition: "aging"
+                        });
+                        setOk(`${posLabel(r.position)} ventil sparad: ≈${Math.trunc(v)} år`);
+                        router.refresh();
+                      } catch (e) {
+                        setErr(e instanceof Error ? e.message : "Kunde inte spara.");
+                      }
+                    });
+                  }}
+                >
+                  Spara ventil
                 </Button>
               </div>
             </div>
