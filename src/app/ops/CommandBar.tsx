@@ -62,6 +62,8 @@ export function CommandBar() {
                       ? "/ops/quotes"
                     : res.to === "integrations"
                       ? "/ops/integrations"
+                      : res.to === "settings"
+                        ? "/ops/settings"
                       : "/ops/cases"
                 );
                 return;

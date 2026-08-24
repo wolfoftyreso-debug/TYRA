@@ -2,6 +2,7 @@ export type Command =
   | { kind: "navigate"; to: "pick_queue" | "quotes_queue" }
   | { kind: "navigate"; to: "cases" }
   | { kind: "navigate"; to: "integrations" }
+  | { kind: "navigate"; to: "settings" }
   | { kind: "mark_vehicle_sold"; registrationNumber: string }
   | { kind: "mark_wheels_forgotten"; wheelSetCode: string }
   | { kind: "mark_customer_deceased"; registrationNumber: string }
@@ -56,6 +57,9 @@ export function parseCommand(rawInput: string): Command {
     lower === "suppliers"
   ) {
     return { kind: "navigate", to: "integrations" };
+  }
+  if (lower === "inställningar" || lower === "installningar" || lower === "settings") {
+    return { kind: "navigate", to: "settings" };
   }
 
   // Ops shortcuts (instrument commands)

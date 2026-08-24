@@ -35,5 +35,9 @@ describe("parseCommand", () => {
       registrationNumber: "ABC123"
     });
   });
+
+  it("parses settings navigation", () => {
+    expect(parseCommand("inställningar")).toEqual({ kind: "navigate", to: "settings" });
+  });
 });
 

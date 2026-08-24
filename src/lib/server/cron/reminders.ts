@@ -1,4 +1,5 @@
 import { query, withTransaction } from "@/lib/server/db";
+import { getOrgPolicies } from "@/lib/server/orgPolicies";
 
 type Channel = "sms" | "email" | "letter";
 
@@ -258,6 +259,7 @@ export async function runSeasonAndLawReminders(input: {
 }): Promise<ReminderRunResult> {
   const now = input.now ?? new Date();
   const year = now.getFullYear();
+  const policies = await getOrgPolicies({ organizationId: input.organizationId });
 
   // Sweden defaults (v1). Later: org-specific policies.
   const winterSeasonWindowStart = new Date(`${year}-10-01T00:00:00.000Z`);
@@ -623,6 +625,51 @@ export async function runSeasonAndLawReminders(input: {
         enqueued++;
       }
     });
+  }
+
+  // Disposal policy: after escalation, keep forgotten wheel sets for N days then dispose.
+  const disposeAfterDays = Math.max(0, policies.forgotten_dispose_after_days ?? 60);
+  if (disposeAfterDays >= 0) {
+    const due = await query<{
+      thread_id: string;
+      wheel_set_id: string;
+      escalated_at: string;
+    }>(
+      `select rt.id as thread_id, rt.wheel_set_id as wheel_set_id, rt.escalated_at as escalated_at
+       from reminder_threads rt
+       join wheel_sets ws
+         on ws.organization_id = rt.organization_id and ws.id = rt.wheel_set_id
+       where rt.organization_id = $1
+         and rt.status = 'OPEN'
+         and rt.thread_key like 'pickup:wheels:%'
+         and rt.escalated_at is not null
+         and rt.escalated_at <= now() - ($2::text || ' days')::interval
+         and ws.disposition_status = 'FORGOTTEN_LEFT_BEHIND'
+         and ws.storage_status = 'STORED'`,
+      [input.organizationId, disposeAfterDays]
+    );
+
+    for (const d of due.rows) {
+      await withTransaction(async () => {
+        await query(
+          `update wheel_sets
+           set disposition_status = 'DISPOSED',
+               disposition_notes = 'Auto-kasserad efter eskalering (policy: ' || $3::text || ' dagar)',
+               updated_at = now()
+           where organization_id = $1 and id = $2 and disposition_status = 'FORGOTTEN_LEFT_BEHIND'`,
+          [input.organizationId, d.wheel_set_id, disposeAfterDays]
+        );
+        await query(
+          `update reminder_threads
+           set status = 'STOPPED',
+               stopped_reason = 'DISPOSED_AFTER_ESCALATION',
+               stopped_at = now(),
+               updated_at = now()
+           where id = $1 and status = 'OPEN'`,
+          [d.thread_id]
+        );
+      });
+    }
   }
 
   // Record run

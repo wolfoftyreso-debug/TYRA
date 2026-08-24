@@ -17,6 +17,7 @@ export type CommandResponse =
   | { kind: "navigate"; to: "pick_queue" | "quotes_queue" }
   | { kind: "navigate"; to: "cases" }
   | { kind: "navigate"; to: "integrations" }
+  | { kind: "navigate"; to: "settings" }
   | { kind: "ok"; message: string }
   | { kind: "vehicle"; data: Awaited<ReturnType<typeof lookupByRegistration>> }
   | {
