@@ -10,6 +10,14 @@ export type InspectionPositionRow = {
   ai_tread_depth_mm: number | null;
   ai_confidence: number | null;
   ai_model_version: string | null;
+  wear_pattern?: string | null;
+  damage_types?: string[] | null;
+  tyre_brand?: string | null;
+  tyre_model?: string | null;
+  tyre_dimension?: string | null;
+  dot_week?: number | null;
+  dot_year?: number | null;
+  notes?: string | null;
 };
 
 export async function getInspection(input: { organizationId: string; inspectionId: string }) {
@@ -32,7 +40,8 @@ export async function getInspection(input: { organizationId: string; inspectionI
 
     const positions = await client.query<InspectionPositionRow>(
       `select id, position, tread_depth_mm, tread_depth_source, verified, confidence,
-              ai_tread_depth_mm, ai_confidence, ai_model_version
+              ai_tread_depth_mm, ai_confidence, ai_model_version,
+              wear_pattern, damage_types, tyre_brand, tyre_model, tyre_dimension, dot_week, dot_year, notes
        from tire_inspection_positions
        where organization_id = $1 and inspection_id = $2
        order by position asc`,

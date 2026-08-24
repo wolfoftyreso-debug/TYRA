@@ -12,6 +12,13 @@ function stateColor(state: string) {
   return "bg-zinc-300";
 }
 
+function warningLabel(warnings: Array<{ tone: string }> | null | undefined) {
+  const list = warnings ?? [];
+  if (list.some((w) => w.tone === "blocked")) return { text: "Åtgärd krävs", cls: "text-red-700" } as const;
+  if (list.some((w) => w.tone === "attention")) return { text: "Behöver uppmärksamhet", cls: "text-amber-700" } as const;
+  return null;
+}
+
 function posLabel(p: string) {
   if (p === "LF") return "Vänster fram";
   if (p === "RF") return "Höger fram";
@@ -126,6 +133,10 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
                       <span className="ml-2 text-xs text-[var(--tyra-subtle)]">{p.health.treadDepthSource}</span>
                     ) : null}
                   </div>
+                  {(() => {
+                    const wl = warningLabel((p as any).warnings);
+                    return wl ? <div className={`mt-2 text-xs font-medium ${wl.cls}`}>{wl.text}</div> : null;
+                  })()}
                 </div>
               </Card>
             ))}

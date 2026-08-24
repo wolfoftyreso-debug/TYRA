@@ -1,5 +1,6 @@
 import { computeInstalledPrice, type PricingRule } from "@/lib/domain/pricing";
 import { computeTireHealth } from "@/lib/domain/tireHealth";
+import { computeTireWarnings } from "@/lib/domain/tireWarnings";
 import type { SupplierId } from "@/lib/suppliers/types";
 
 import { query, withTransaction } from "./db";
@@ -50,6 +51,7 @@ export type HubWheelPosition = "LF" | "RF" | "LR" | "RR";
 export type HubPositionView = {
   position: HubWheelPosition;
   health: ReturnType<typeof computeTireHealth>;
+  warnings: ReturnType<typeof computeTireWarnings>["positionWarnings"]["LF"];
   tyre: {
     brand: string | null;
     model: string | null;
@@ -140,8 +142,8 @@ export async function getHubViewByToken(input: { token: string }) {
   }
 
   // Current mounted wheel set (v1 heuristic)
-  const wsRes = await query<{ id: string }>(
-    `select id
+  const wsRes = await query<{ id: string; season: string }>(
+    `select id, season
      from wheel_sets
      where organization_id = $1 and vehicle_id = $2 and status = 'MOUNTED'
      order by updated_at desc
@@ -149,6 +151,7 @@ export async function getHubViewByToken(input: { token: string }) {
     [link.organization_id, vehicle.id]
   );
   const wheelSetId = wsRes.rows[0]?.id ?? null;
+  const mountedSeason = wsRes.rows[0]?.season ?? null;
 
   const posRows =
     wheelSetId
@@ -161,7 +164,11 @@ export async function getHubViewByToken(input: { token: string }) {
           tyre_brand: string | null;
           tyre_model: string | null;
           tyre_dimension: string | null;
+          dot_week: number | null;
           dot_year: number | null;
+          wear_pattern: string | null;
+          damage_types: string[] | null;
+          notes: string | null;
         }>(
           `with latest as (
              select id
@@ -178,7 +185,11 @@ export async function getHubViewByToken(input: { token: string }) {
                   tip.tyre_brand,
                   tip.tyre_model,
                   tip.tyre_dimension,
-                  tip.dot_year
+                  tip.dot_week,
+                  tip.dot_year,
+                  tip.wear_pattern,
+                  tip.damage_types,
+                  tip.notes
            from tire_inspection_positions tip
            join latest on latest.id = tip.inspection_id
            where tip.organization_id = $1
@@ -188,7 +199,34 @@ export async function getHubViewByToken(input: { token: string }) {
       : { rows: [] as any[] };
 
   const byPos = new Map<HubWheelPosition, HubPositionView>();
+  const warningInputs: Array<{
+    position: "LF" | "RF" | "LR" | "RR";
+    verified: boolean;
+    treadDepthMm: number | null;
+    tyreBrand: string | null;
+    tyreModel: string | null;
+    tyreDimension: string | null;
+    dotWeek: number | null;
+    dotYear: number | null;
+    wearPattern: string | null;
+    damageTypes: string[] | null;
+    notes: string | null;
+  }> = [];
+
   for (const r of posRows.rows) {
+    warningInputs.push({
+      position: r.position,
+      verified: r.verified === true,
+      treadDepthMm: r.verified === true ? r.tread_depth_mm : null,
+      tyreBrand: r.verified === true ? r.tyre_brand : null,
+      tyreModel: r.verified === true ? r.tyre_model : null,
+      tyreDimension: r.verified === true ? r.tyre_dimension : null,
+      dotWeek: r.dot_week ?? null,
+      dotYear: r.dot_year ?? null,
+      wearPattern: r.wear_pattern ?? null,
+      damageTypes: (r.damage_types as any) ?? null,
+      notes: r.notes ?? null
+    });
     byPos.set(r.position, {
       position: r.position,
       health: computeTireHealth({
@@ -197,6 +235,7 @@ export async function getHubViewByToken(input: { token: string }) {
         confidence: r.confidence,
         verified: r.verified
       }),
+      warnings: [],
       tyre: {
         brand: r.verified === true ? r.tyre_brand : null,
         model: r.verified === true ? r.tyre_model : null,
@@ -206,6 +245,30 @@ export async function getHubViewByToken(input: { token: string }) {
     });
   }
 
+  const warnings = computeTireWarnings({
+    positions: warningInputs.length
+      ? warningInputs
+      : (["LF", "RF", "LR", "RR"] as const).map((p) => ({
+          position: p,
+          verified: false,
+          treadDepthMm: null,
+          tyreBrand: null,
+          tyreModel: null,
+          tyreDimension: null,
+          dotWeek: null,
+          dotYear: null,
+          wearPattern: null,
+          damageTypes: null,
+          notes: null
+        })),
+    mountedSeason
+  });
+
+  for (const p of ["LF", "RF", "LR", "RR"] as const) {
+    const v = byPos.get(p);
+    if (v) v.warnings = warnings.positionWarnings[p];
+  }
+
   const allPositions: HubWheelPosition[] = ["LF", "RF", "LR", "RR"];
   const positions = allPositions.map((p) => {
     const existing = byPos.get(p);
@@ -213,6 +276,7 @@ export async function getHubViewByToken(input: { token: string }) {
       existing ?? {
         position: p,
         health: computeTireHealth({ treadDepthMm: null }),
+        warnings: [],
         tyre: { brand: null, model: null, dimension: null, dotYear: null }
       }
     );
