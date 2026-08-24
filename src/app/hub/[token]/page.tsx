@@ -2,6 +2,7 @@ import { formatSekFromOre } from "@/lib/domain/pricing";
 import { getHubViewByToken } from "@/lib/server/hub";
 
 import { HubClient } from "./ui";
+import { RelationshipClient } from "./relationship";
 
 function stateColor(state: string) {
   if (state === "green") return "bg-emerald-500";
@@ -43,6 +44,28 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
           {view.vehicle?.model ?? ""}
         </h1>
         <div className="mt-2 text-sm text-black/60">{view.customerName}</div>
+
+        <div className="mt-8 rounded-3xl border border-black/10 bg-white p-6">
+          <div className="text-xs font-medium text-black/60">Status</div>
+          <div className="mt-2 text-sm text-black/80">
+            {view.commercialState === "NO_NEED"
+              ? "Allt ser bra ut just nu."
+              : view.commercialState === "LIVE_OPTIONS_AVAILABLE"
+                ? "Några däck behöver uppmärksamhet. Här är dagens alternativ."
+                : view.commercialState === "ORDER_CONFIRMED"
+                  ? "Däck är beställda. Nästa steg är att boka tid."
+                  : "Din status uppdateras här över tid."}
+          </div>
+          {view.nextBooking ? (
+            <div className="mt-3 rounded-2xl border border-black/10 bg-white p-4 text-sm">
+              <div className="font-medium">Din nästa tid</div>
+              <div className="mt-1 text-black/70">
+                {new Date(view.nextBooking.start_at).toLocaleString("sv-SE")} –{" "}
+                {new Date(view.nextBooking.end_at).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         {view.lastOrder ? (
           <div className="mt-8 rounded-3xl border border-black/10 bg-white p-6">
@@ -112,6 +135,27 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
           </div>
         </div>
 
+        {view.storedWheelSets?.length ? (
+          <div className="mt-10 rounded-3xl border border-black/10 bg-white p-6">
+            <div className="text-xs font-medium text-black/60">På hotellet</div>
+            <div className="mt-4 space-y-2">
+              {view.storedWheelSets.map((ws: any) => (
+                <div key={ws.wheel_set_id} className="rounded-2xl border border-black/10 bg-white p-4 text-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium">
+                      {ws.season === "winter" ? "Vinterhjul" : ws.season === "summer" ? "Sommarhjul" : ws.season}
+                    </div>
+                    <div className="text-black/60">{ws.storage_code ?? "—"}</div>
+                  </div>
+                  <div className="mt-1 text-black/60">
+                    Status: {ws.status} • Lager: {ws.storage_status}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
         <div className="mt-10 rounded-3xl border border-black/10 bg-white p-6">
           <div className="flex items-center justify-between">
             <div>
@@ -161,6 +205,8 @@ export default async function HubPage({ params }: { params: Promise<{ token: str
             </div>
           )}
         </div>
+
+        <RelationshipClient token={token} commercialState={view.commercialState} prefs={view.prefs} />
       </div>
     </main>
   );

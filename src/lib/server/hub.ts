@@ -118,6 +118,10 @@ export async function getHubViewByToken(input: { token: string }) {
   );
   const vehicle = vehicleRes.rows[0];
   if (!vehicle) {
+    const prefs = await getOrCreateCommPrefs({
+      organizationId: link.organization_id,
+      customerId: link.customer_id
+    });
     return {
       organizationId: link.organization_id,
       customerId: link.customer_id,
@@ -126,7 +130,10 @@ export async function getHubViewByToken(input: { token: string }) {
       positions: [] as HubPositionView[],
       liveOptions: null,
       commercialState: "REPLACEMENT_MONITORING" as CommercialState,
-      lastOrder: null
+      lastOrder: null,
+      nextBooking: null,
+      storedWheelSets: [],
+      prefs
     };
   }
 
@@ -240,6 +247,44 @@ export async function getHubViewByToken(input: { token: string }) {
   );
   const lastOrder = lastOrderRes.rows[0] ?? null;
 
+  const nextBookingRes = await query<{
+    id: string;
+    start_at: string;
+    end_at: string;
+    status: string;
+  }>(
+    `select id, start_at, end_at, status
+     from bookings
+     where organization_id = $1 and vehicle_id = $2 and status = 'BOOKED' and start_at >= now()
+     order by start_at asc
+     limit 1`,
+    [link.organization_id, vehicle.id]
+  );
+  const nextBooking = nextBookingRes.rows[0] ?? null;
+
+  const storedRes = await query<{
+    wheel_set_id: string;
+    season: string;
+    status: string;
+    storage_status: string;
+    storage_code: string | null;
+  }>(
+    `select ws.id as wheel_set_id, ws.season, ws.status, ws.storage_status,
+            sp.code as storage_code
+     from wheel_sets ws
+     left join storage_stays ss on ss.wheel_set_id = ws.id and ss.organization_id = ws.organization_id and ss.ended_at is null
+     left join storage_positions sp on sp.id = ss.position_id and sp.organization_id = ws.organization_id
+     where ws.organization_id = $1 and ws.vehicle_id = $2 and ws.storage_status = 'STORED'
+     order by ws.updated_at desc
+     limit 5`,
+    [link.organization_id, vehicle.id]
+  );
+
+  const prefs = await getOrCreateCommPrefs({
+    organizationId: link.organization_id,
+    customerId: link.customer_id
+  });
+
   const commercialState: CommercialState = lastOrder
     ? (lastOrder.status as CommercialState)
     : replacementRecommended
@@ -260,8 +305,164 @@ export async function getHubViewByToken(input: { token: string }) {
     positions,
     liveOptions,
     commercialState,
-    lastOrder
+    lastOrder,
+    nextBooking,
+    storedWheelSets: storedRes.rows,
+    prefs
   };
+}
+
+async function getOrCreateCommPrefs(input: { organizationId: string; customerId: string }) {
+  const res = await query<{
+    level: string;
+    remind_worn_tires: boolean;
+    remind_prices: boolean;
+    remind_season: boolean;
+    remind_bookings: boolean;
+    remind_storage: boolean;
+  }>(
+    `insert into customer_communication_preferences (
+       organization_id, customer_id
+     )
+     values ($1,$2)
+     on conflict (organization_id, customer_id) do update set updated_at = now()
+     returning level, remind_worn_tires, remind_prices, remind_season, remind_bookings, remind_storage`,
+    [input.organizationId, input.customerId]
+  );
+  return res.rows[0]!;
+}
+
+export async function updateCommPrefsFromHub(input: {
+  token: string;
+  level: "fewer" | "normal" | "updated";
+  remindWornTires: boolean;
+  remindPrices: boolean;
+  remindSeason: boolean;
+  remindBookings: boolean;
+  remindStorage: boolean;
+}) {
+  const tokenHash = sha256(input.token);
+  const linkRes = await query<{ organization_id: string; customer_id: string }>(
+    `select organization_id, customer_id
+     from customer_hub_links
+     where token_hash = $1 and revoked_at is null
+     limit 1`,
+    [tokenHash]
+  );
+  const link = linkRes.rows[0];
+  if (!link) throw new Error("Ogiltig länk.");
+
+  await query(
+    `update customer_communication_preferences
+     set level = $1,
+         remind_worn_tires = $2,
+         remind_prices = $3,
+         remind_season = $4,
+         remind_bookings = $5,
+         remind_storage = $6,
+         updated_at = now()
+     where organization_id = $7 and customer_id = $8`,
+    [
+      input.level,
+      input.remindWornTires,
+      input.remindPrices,
+      input.remindSeason,
+      input.remindBookings,
+      input.remindStorage,
+      link.organization_id,
+      link.customer_id
+    ]
+  );
+
+  return { ok: true as const };
+}
+
+export async function createBookingFromHub(input: {
+  token: string;
+  startAtIso: string;
+  endAtIso: string;
+}) {
+  const tokenHash = sha256(input.token);
+  const linkRes = await query<{ organization_id: string; customer_id: string }>(
+    `select organization_id, customer_id
+     from customer_hub_links
+     where token_hash = $1 and revoked_at is null
+     limit 1`,
+    [tokenHash]
+  );
+  const link = linkRes.rows[0];
+  if (!link) throw new Error("Ogiltig länk.");
+
+  return withTransaction(async (client) => {
+    const vehicle = await client.query<{ id: string }>(
+      `select id
+       from vehicles
+       where organization_id = $1 and customer_id = $2
+       order by created_at desc
+       limit 1`,
+      [link.organization_id, link.customer_id]
+    );
+    const vehicleId = vehicle.rows[0]?.id ?? null;
+    if (!vehicleId) throw new Error("Kunde inte skapa bokning.");
+
+    const order = await client.query<{ id: string | null; tire_case_id: string | null }>(
+      `select id, tire_case_id
+       from tire_orders
+       where organization_id = $1 and vehicle_id = $2
+       order by ordered_at desc
+       limit 1`,
+      [link.organization_id, vehicleId]
+    );
+    const tireOrderId = order.rows[0]?.id ?? null;
+    const tireCaseId = order.rows[0]?.tire_case_id ?? null;
+
+    const res = await client.query<{ id: string }>(
+      `insert into bookings (
+         organization_id, customer_id, vehicle_id, tire_case_id, tire_order_id,
+         start_at, end_at, status, requested_operations
+       )
+       values ($1,$2,$3,$4,$5,$6,$7,'BOOKED',$8)
+       returning id`,
+      [
+        link.organization_id,
+        link.customer_id,
+        vehicleId,
+        tireCaseId,
+        tireOrderId,
+        input.startAtIso,
+        input.endAtIso,
+        JSON.stringify(["TIRE_SWAP", "TIRE_INSTALLATION", "BALANCING"])
+      ]
+    );
+
+    if (tireCaseId) {
+      await client.query(
+        `insert into tire_case_events (
+           organization_id, tire_case_id, event_type, source, actor_user_id, data
+         )
+         values ($1,$2,'BOOKING_CREATED','CUSTOMER',null,$3)`,
+        [
+          link.organization_id,
+          tireCaseId,
+          JSON.stringify({ bookingId: res.rows[0]!.id, startAt: input.startAtIso })
+        ]
+      );
+      await client.query(
+        `update tire_cases
+         set commercial_status = 'BOOKED', updated_at = now()
+         where organization_id = $1 and id = $2`,
+        [link.organization_id, tireCaseId]
+      );
+      await client.query(
+        `update tire_orders
+         set status = 'BOOKED'
+         where organization_id = $1 and id = $2`,
+        [link.organization_id, tireOrderId]
+      );
+    }
+
+    return { ok: true as const, bookingId: res.rows[0]!.id };
+  });
 }
 
 async function computeLiveOptions(input: {
